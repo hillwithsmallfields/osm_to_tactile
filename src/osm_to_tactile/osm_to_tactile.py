@@ -3,10 +3,14 @@
 """Program to output laser-cutter data from OSM."""
 
 import argparse
-from collections import defaultdict
-import dobishem.storage as storage
+import os
 
-# import OSMPythonTools
+from collections import defaultdict
+
+import svg
+import dobishem.storage as storage
+import shapely
+import pyproj
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 import ezdxf
 
@@ -88,6 +92,25 @@ class Crossing:
         return {'type': 'crossing',
                 'geometry': self.geometry}
 
+def write_svg(output, streets, pavements, crossings):
+
+    # canvas = svg.SVG(
+    #     width=60,
+    #     height=60,
+    #     elements=[
+    #         svg.Circle(
+    #             cx=30, cy=30, r=20,
+    #             stroke="red",
+    #             fill="white",
+    #             stroke_width=5,
+    #         ),
+    #     ],
+
+    pass
+
+def write_dxf(output, streets, pavements, crossings):
+    pass
+
 def show(streets, pavements, crossings):
     print("Streets:")
     print("========")
@@ -106,6 +129,19 @@ def show(streets, pavements, crossings):
     for crossing in crossings:
         print("    ", crossing)
 
+# def overall_bbox(ways):
+#     """Return the overall bbox of multiple ways."""
+#     all_points = [xy
+#                   for w in ways
+#                   for xy in w.geometry()['coordinates']
+#                   ]
+#     print("all points", all_points)
+#     xs = [xy[0] for xy in all_points]
+#     ys = [xy[1] for xy in all_points]
+#     print("xs", xs)
+#     print("ys", ys)
+#     return min(xs), min(ys), max(xs), max(ys)
+
 def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
     if verbose:
         print("fetching data in", west, south, east, north)
@@ -118,10 +154,13 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
                                  includeGeometry=True,
                                  out='body')
     osm_data = overpass.query(query)
+    ways = osm_data.ways()
+    # bbox = overall_bbox(ways)
+    # print("overall bbox is", bbox)
     streets = defaultdict(list)
     pavements = []
     crossings = []
-    for way in osm_data.ways():
+    for way in ways:
         tags = way.tags()
         geometry = way.geometry()
         if tags.get('highway') == 'footway':
@@ -174,6 +213,12 @@ def osm_to_tactile_main(
                                   for sn, sg in streets.items()},
                       'pavements': [p.json() for p in pavements],
                       'crossings': [c.json() for c in crossings]})
+    if output:
+        match os.path.splitext(output)[0]:
+            case '.dxf':
+                write_dxf(output, streets, pavements, crossings)
+            case '.svg':
+                write_svg(output, streets, pavements, crossings)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())

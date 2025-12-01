@@ -1,2 +1,7 @@
 OSMPythonTools
 ezdxf
+frozendict
+svg.py
+dobishem
+shapely
+pyproj
