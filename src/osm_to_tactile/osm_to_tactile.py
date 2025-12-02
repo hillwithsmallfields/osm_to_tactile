@@ -32,6 +32,7 @@ def get_args():
     parser.add_argument("--save",
                         help="""Save data to file for re-use.""")
     parser.add_argument("--output", "-o")
+    parser.add_argument("--verbose", "-v", action='store_true')
     return vars(parser.parse_args())
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
@@ -56,11 +57,14 @@ class Street:
     def __str__(self):
         return f"<Street {self.subtype} {self.name} {self.geometry}>"
 
+    def coords(self):
+        return list(self.geometry.coords)
+
     def json(self):
         return {'type': 'street',
                 'subtype': self.subtype,
                 'name': self.name,
-                'geometry': self.geometry}
+                'geometry': self.coords()}
 
 class Pavement:
 
@@ -73,9 +77,12 @@ class Pavement:
     def __str__(self):
         return f"<Pavement {self.geometry}>"
 
+    def coords(self):
+        return list(self.geometry.coords)
+
     def json(self):
         return {'type': 'pavement',
-                'geometry': self.geometry}
+                'geometry': self.coords()}
 
 class Crossing:
 
@@ -88,9 +95,12 @@ class Crossing:
     def __str__(self):
         return f"<Crossing {self.geometry}>"
 
+    def coords(self):
+        return list(self.geometry.coords)
+
     def json(self):
         return {'type': 'crossing',
-                'geometry': self.geometry}
+                'geometry': self.coords()}
 
 def write_svg(output, streets, pavements, crossings):
 
@@ -118,10 +128,10 @@ def coords(transformer, base_x, base_y, geometry):
                              for lon, lat in xy_list)]
     match geometry['type']:
         case 'LineString':
-            return transform_xy_list(geometry['coordinates'])
+            return shapely.LineString(transform_xy_list(geometry['coordinates']))
         case 'Polygon':
-            return [transform_xy_list(shape)
-                    for shape in geometry['coordinates']]
+            return shapely.Polygon([transform_xy_list(shape)
+                                    for shape in geometry['coordinates']])
         case _:
             print("Unknown geometry type", _)
 
@@ -186,7 +196,8 @@ def osm_to_tactile_main(
         west=None, south=None, east=None, north=None,
         centre=None, metres=None, width=None, height=None,
         load=None, save=None,
-        output=None):
+        output=None,
+        verbose=False):
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
     The rectangle can be specified as a bounding box or as a centre and width and height."""
     size_scale = 1/111320 if metres else 1
@@ -212,6 +223,8 @@ def osm_to_tactile_main(
             east = longitude + size_scale * (width/2)
             north = latitude + size_scale * (height/2)
         streets, pavements, crossings = osm_fetch_streets_in_bbox(west, south, east, north)
+    if verbose:
+        show(streets, pavements, crossings)
     if save:
         storage.save(save,
                      {'streets': {sn: [s.json()
