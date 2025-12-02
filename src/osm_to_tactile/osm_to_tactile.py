@@ -37,7 +37,15 @@ def get_args():
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 
-class Street:
+class LinearWay:
+
+    def coords(self):
+        return list(self.geometry.coords)
+
+    def solid(self):
+        return shapely.buffer(self.geometry, self.width / 2)
+
+class Street(LinearWay):
 
     def __init__(self,
                  geometry,
@@ -53,12 +61,10 @@ class Street:
             self.attributes = {'name': self.name,
                                'subtype': self.subtype}
         self.geometry = geometry
+        self.width = 4          # TODO: set according to street data
 
     def __str__(self):
         return f"<Street {self.subtype} {self.name} {self.geometry}>"
-
-    def coords(self):
-        return list(self.geometry.coords)
 
     def json(self):
         return {'type': 'street',
@@ -66,13 +72,14 @@ class Street:
                 'name': self.name,
                 'geometry': self.coords()}
 
-class Pavement:
+class Pavement(LinearWay):
 
     def __init__(self,
                  geometry,
                  type=None,     # throwaway for calling with **args when loading from json
                  ):
         self.geometry = geometry
+        self.width = 1
 
     def __str__(self):
         return f"<Pavement {self.geometry}>"
@@ -84,13 +91,14 @@ class Pavement:
         return {'type': 'pavement',
                 'geometry': self.coords()}
 
-class Crossing:
+class Crossing(LinearWay):
 
     def __init__(self,
                  geometry,
                  type=None,     # throwaway for calling with **args when loading from json
                  ):
         self.geometry = geometry
+        self.width = 2
 
     def __str__(self):
         return f"<Crossing {self.geometry}>"
@@ -190,6 +198,11 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
             streets[street.name].append(street)
     return streets, pavements, crossings
 
+def convert_to_islands(streets, pavements, crossings):
+    return shapely.union_all([s.solid()
+                              for sg in streets.values()
+                              for s in sg])
+
 def osm_to_tactile_main(
         bbox=None,
         osmurl=None,
@@ -232,6 +245,8 @@ def osm_to_tactile_main(
                                   for sn, sg in streets.items()},
                       'pavements': [p.json() for p in pavements],
                       'crossings': [c.json() for c in crossings]})
+    islands = convert_to_islands(streets, pavements, crossings)
+    print("islands are", islands)
     if output:
         match os.path.splitext(output)[0]:
             case '.dxf':
