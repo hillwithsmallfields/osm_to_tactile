@@ -111,6 +111,20 @@ def write_svg(output, streets, pavements, crossings):
 def write_dxf(output, streets, pavements, crossings):
     pass
 
+def coords(transformer, base_x, base_y, geometry):
+    def transform_xy_list(xy_list):
+        return [(x-base_x, y-base_y)
+                for x, y in (transformer.transform(lon, lat)
+                             for lon, lat in xy_list)]
+    match geometry['type']:
+        case 'LineString':
+            return transform_xy_list(geometry['coordinates'])
+        case 'Polygon':
+            return [transform_xy_list(shape)
+                    for shape in geometry['coordinates']]
+        case _:
+            print("Unknown geometry type", _)
+
 def show(streets, pavements, crossings):
     print("Streets:")
     print("========")
@@ -129,19 +143,6 @@ def show(streets, pavements, crossings):
     for crossing in crossings:
         print("    ", crossing)
 
-# def overall_bbox(ways):
-#     """Return the overall bbox of multiple ways."""
-#     all_points = [xy
-#                   for w in ways
-#                   for xy in w.geometry()['coordinates']
-#                   ]
-#     print("all points", all_points)
-#     xs = [xy[0] for xy in all_points]
-#     ys = [xy[1] for xy in all_points]
-#     print("xs", xs)
-#     print("ys", ys)
-#     return min(xs), min(ys), max(xs), max(ys)
-
 def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
     if verbose:
         print("fetching data in", west, south, east, north)
@@ -154,23 +155,28 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
                                  includeGeometry=True,
                                  out='body')
     osm_data = overpass.query(query)
+
+    transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3857")
+    left, bottom, right, top = transformer.transform_bounds(west, south, east, north)
+
     ways = osm_data.ways()
-    # bbox = overall_bbox(ways)
-    # print("overall bbox is", bbox)
     streets = defaultdict(list)
     pavements = []
     crossings = []
     for way in ways:
         tags = way.tags()
         geometry = way.geometry()
+        if geometry['type'] != 'LineString':
+            print("Skipping a non-LineString highway")
+            continue
         if tags.get('highway') == 'footway':
             match tags.get('footway'):
                 case 'sidewalk':
-                    pavements.append(Pavement(geometry['coordinates']))
+                    pavements.append(Pavement(coords(transformer, left, bottom, geometry)))
                 case 'crossing':
-                    crossings.append(Crossing(geometry['coordinates']))
+                    crossings.append(Crossing(coords(transformer, left, bottom, geometry)))
         else:
-            street = Street(attributes=tags, geometry=geometry['coordinates'])
+            street = Street(attributes=tags, geometry=coords(transformer, left, bottom, geometry))
             streets[street.name].append(street)
     return streets, pavements, crossings
 
