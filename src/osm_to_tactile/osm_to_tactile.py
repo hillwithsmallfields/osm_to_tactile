@@ -27,10 +27,6 @@ def get_args():
                         help="""Treat size and width as approximate metres""")
     parser.add_argument("--width", "-W", type=float)
     parser.add_argument("--height", "-H", type=float)
-    parser.add_argument("--load",
-                        help="""Load saved data from file instead of using OSM API.""")
-    parser.add_argument("--save",
-                        help="""Save data to file for re-use.""")
     parser.add_argument("--output", "-o")
     parser.add_argument("--verbose", "-v", action='store_true')
     return vars(parser.parse_args())
@@ -54,7 +50,7 @@ class Street(LinearWay):
 
     def __init__(self,
                  geometry,
-                 type=None,     # throwaway for calling with **args when loading from json
+                 type=None,
                  attributes=None,
                  name=None,
                  subtype=None,
@@ -81,7 +77,7 @@ class Pavement(LinearWay):
 
     def __init__(self,
                  geometry,
-                 type=None,     # throwaway for calling with **args when loading from json
+                 type=None,
                  ):
         self.geometry = geometry
         self.width = 1
@@ -97,7 +93,7 @@ class Crossing(LinearWay):
 
     def __init__(self,
                  geometry,
-                 type=None,     # throwaway for calling with **args when loading from json
+                 type=None,
                  ):
         self.geometry = geometry
         self.width = 2
@@ -215,44 +211,29 @@ def osm_to_tactile_main(
         osmurl=None,
         west=None, south=None, east=None, north=None,
         centre=None, metres=None, width=None, height=None,
-        load=None, save=None,
         output=None,
         verbose=False):
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
     The rectangle can be specified as a bounding box or as a centre and width and height."""
     size_scale = 1/111320 if metres else 1
-    if load:
-        data = storage.load(load)
-        streets = {name: [Street(**s) for s in sg] for name, sg in data['streets'].items()}
-        pavements = [Pavement(**p) for p in data['pavements']]
-        crossings = [Crossing(**c) for c in data['crossings']]
-    else:
-        if bbox:
-            west, south, east, north = bbox
-        elif centre and width and height:
-            west = centre[0] - width/2
-            south = centre[1] - height/2
-            east = centre[0] + width/2
-            north = centre[1] + height/2
-        elif osmurl and width and height:
-            latitude, longitude = osmurl.split("=")[1].split("/")[1:]
-            latitude = float(latitude)
-            longitude = float(longitude)
-            west = longitude - size_scale * (width/2)
-            south = latitude - size_scale * (height/2)
-            east = longitude + size_scale * (width/2)
-            north = latitude + size_scale * (height/2)
-        bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox(west, south, east, north)
+    if bbox:
+        west, south, east, north = bbox
+    elif centre and width and height:
+        west = centre[0] - width/2
+        south = centre[1] - height/2
+        east = centre[0] + width/2
+        north = centre[1] + height/2
+    elif osmurl and width and height:
+        latitude, longitude = osmurl.split("=")[1].split("/")[1:]
+        latitude = float(latitude)
+        longitude = float(longitude)
+        west = longitude - size_scale * (width/2)
+        south = latitude - size_scale * (height/2)
+        east = longitude + size_scale * (width/2)
+        north = latitude + size_scale * (height/2)
+    bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox(west, south, east, north)
     if verbose:
         show(streets, pavements, crossings)
-    if save:
-        storage.save(save,
-                     {'bbox': bbox,
-                      'streets': {sn: [s.json()
-                                       for s in sg]
-                                  for sn, sg in streets.items()},
-                      'pavements': [p.json() for p in pavements],
-                      'crossings': [c.json() for c in crossings]})
     print("output is", output)
     if output:
         match os.path.splitext(output)[1]:
