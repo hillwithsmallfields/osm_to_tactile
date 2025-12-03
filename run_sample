@@ -3,6 +3,6 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 source $SCRIPT_DIR/env/bin/activate
-$SCRIPT_DIR/src/osm_to_tactile/osm_to_tactile.py --osmurl https://www.openstreetmap.org/#map=16/50.83677/4.38893 --metric --width 300 --height 200 --save etterbeek.json
+$SCRIPT_DIR/src/osm_to_tactile/osm_to_tactile.py --osmurl https://www.openstreetmap.org/#map=16/50.83677/4.38893 --metric --width 1000 --height 1000 --save etterbeek.json --output etterbeek.svg
 # $SCRIPT_DIR/src/osm_to_tactile/osm_to_tactile.py --load etterbeek.json --save /tmp/etterbeek.json --output etterbeek.svg
 

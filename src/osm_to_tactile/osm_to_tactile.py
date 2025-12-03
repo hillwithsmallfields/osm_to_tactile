@@ -41,7 +41,6 @@ class LinearWay:
 
     def coords(self):
         try:
-            print("getting coords of", self.geometry)
             return list(self.geometry.coords)
         except NotImplementedError as e:
             print("error:", e)
@@ -110,7 +109,20 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
-def write_svg(output, streets, pavements, crossings):
+def write_svg(output, bbox, streets, pavements, crossings):
+    # TODO: surround with boilerplate
+    # TODO: flip y coordinate in boilerplate
+    print("writing output to", output)
+    left, bottom, right, top = bbox
+    width = right - left
+    height = top - bottom
+    islands = convert_to_islands(streets, pavements, crossings)
+    with open(output, 'w') as outstream:
+        outstream.write('<svg width="%f" height="%f">\n' % (width, height))
+        outstream.write("<g>\n")
+        outstream.write(islands.svg().replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <"))
+        outstream.write("</g>\n")
+        outstream.write("</svg>\n")
 
     # canvas = svg.SVG(
     #     width=60,
@@ -124,9 +136,7 @@ def write_svg(output, streets, pavements, crossings):
     #         ),
     #     ],
 
-    pass
-
-def write_dxf(output, streets, pavements, crossings):
+def write_dxf(output, bbox, streets, pavements, crossings):
     pass
 
 def coords(transformer, base_x, base_y, limit_x, limit_y, geometry):
@@ -201,7 +211,7 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
         else:
             street = Street(attributes=tags, geometry=coords(transformer, left, bottom, right, top, geometry))
             streets[street.name].append(street)
-    return streets, pavements, crossings
+    return [left, bottom, right, top], streets, pavements, crossings
 
 def convert_to_islands(streets, pavements, crossings):
     return shapely.union_all([s.solid()
@@ -240,7 +250,7 @@ def osm_to_tactile_main(
             south = latitude - size_scale * (height/2)
             east = longitude + size_scale * (width/2)
             north = latitude + size_scale * (height/2)
-        streets, pavements, crossings = osm_fetch_streets_in_bbox(west, south, east, north)
+        bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox(west, south, east, north)
     if verbose:
         show(streets, pavements, crossings)
     if save:
@@ -250,14 +260,13 @@ def osm_to_tactile_main(
                                   for sn, sg in streets.items()},
                       'pavements': [p.json() for p in pavements],
                       'crossings': [c.json() for c in crossings]})
-    islands = convert_to_islands(streets, pavements, crossings)
-    print("islands are", islands)
+    print("output is", output)
     if output:
-        match os.path.splitext(output)[0]:
+        match os.path.splitext(output)[1]:
             case '.dxf':
-                write_dxf(output, streets, pavements, crossings)
+                write_dxf(output, bbox, streets, pavements, crossings)
             case '.svg':
-                write_svg(output, streets, pavements, crossings)
+                write_svg(output, bbox, streets, pavements, crossings)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
