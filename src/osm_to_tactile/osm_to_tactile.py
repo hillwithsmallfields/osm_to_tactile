@@ -109,9 +109,10 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
+PRETTY_PRINT = True
+
 def write_svg(output, bbox, streets, pavements, crossings):
-    # TODO: surround with boilerplate
-    # TODO: flip y coordinate in boilerplate
+    # TODO: flip rotate coordinates
     print("writing output to", output)
     left, bottom, right, top = bbox
     width = right - left
@@ -120,21 +121,12 @@ def write_svg(output, bbox, streets, pavements, crossings):
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
         outstream.write("<g>\n")
-        outstream.write(islands.svg().replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <"))
+        cuts = islands.svg()
+        if PRETTY_PRINT:
+            cuts = cuts.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
+        outstream.write(cuts)
         outstream.write("</g>\n")
         outstream.write("</svg>\n")
-
-    # canvas = svg.SVG(
-    #     width=60,
-    #     height=60,
-    #     elements=[
-    #         svg.Circle(
-    #             cx=30, cy=30, r=20,
-    #             stroke="red",
-    #             fill="white",
-    #             stroke_width=5,
-    #         ),
-    #     ],
 
 def write_dxf(output, bbox, streets, pavements, crossings):
     pass
@@ -255,7 +247,8 @@ def osm_to_tactile_main(
         show(streets, pavements, crossings)
     if save:
         storage.save(save,
-                     {'streets': {sn: [s.json()
+                     {'bbox': bbox,
+                      'streets': {sn: [s.json()
                                        for s in sg]
                                   for sn, sg in streets.items()},
                       'pavements': [p.json() for p in pavements],
