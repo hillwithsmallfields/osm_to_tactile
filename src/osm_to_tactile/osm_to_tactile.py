@@ -40,7 +40,13 @@ OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 class LinearWay:
 
     def coords(self):
-        return list(self.geometry.coords)
+        try:
+            print("getting coords of", self.geometry)
+            return list(self.geometry.coords)
+        except NotImplementedError as e:
+            print("error:", e)
+            print("when trying to get coords of", self.geometry)
+            print("geometry.geoms is", self.geometry.geoms)
 
     def solid(self):
         return shapely.buffer(self.geometry, self.width / 2)
@@ -130,10 +136,12 @@ def coords(transformer, base_x, base_y, limit_x, limit_y, geometry):
                              for lon, lat in xy_list)]
     match geometry['type']:
         case 'LineString':
-            return shapely.clip_by_rect(shapely.LineString(transform_xy_list(geometry['coordinates'])),
-                                        base_x, base_y,
-                                        limit_x, limit_y,
-                                        )
+            unclipped = shapely.LineString(transform_xy_list(geometry['coordinates']))
+            result = shapely.clip_by_rect(unclipped,
+                                          0, 0,
+                                          limit_x-base_x, limit_y-base_y,
+                                          )
+            return result
         case 'Polygon':
             return shapely.Polygon([transform_xy_list(shape)
                                     for shape in geometry['coordinates']])
