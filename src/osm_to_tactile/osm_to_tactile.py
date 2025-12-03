@@ -188,7 +188,7 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
         tags = way.tags()
         geometry = way.geometry()
         if geometry['type'] != 'LineString':
-            print("Skipping a non-LineString highway")
+            print("Skipping a non-LineString highway", tags.get('name', "anon"), geometry['type'])
             continue
         if tags.get('highway') == 'footway':
             match tags.get('footway'):
@@ -204,7 +204,9 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
 def convert_to_islands(streets, pavements, crossings):
     return shapely.union_all([s.solid()
                               for sg in streets.values()
-                              for s in sg])
+                              for s in sg]
+                             + [p.solid() for p in pavements]
+                             + [c.solid() for c in crossings])
 
 def osm_to_tactile_main(
         bbox=None,
