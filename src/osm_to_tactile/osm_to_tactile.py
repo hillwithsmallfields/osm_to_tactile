@@ -40,9 +40,7 @@ OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 class LinearWay:
 
     def coords(self):
-        result = list(self.geometry)
-        print("coords are", result)
-        return result
+        return list(self.geometry.coords)
 
     def solid(self):
         return shapely.buffer(self.geometry, self.width / 2)
@@ -86,9 +84,6 @@ class Pavement(LinearWay):
     def __str__(self):
         return f"<Pavement {self.geometry}>"
 
-    def coords(self):
-        return list(self.geometry.coords)
-
     def json(self):
         return {'type': 'pavement',
                 'geometry': self.coords()}
@@ -104,9 +99,6 @@ class Crossing(LinearWay):
 
     def __str__(self):
         return f"<Crossing {self.geometry}>"
-
-    def coords(self):
-        return list(self.geometry.coords)
 
     def json(self):
         return {'type': 'crossing',
