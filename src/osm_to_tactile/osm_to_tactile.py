@@ -40,7 +40,9 @@ OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 class LinearWay:
 
     def coords(self):
-        return list(self.geometry.coords)
+        result = list(self.geometry)
+        print("coords are", result)
+        return result
 
     def solid(self):
         return shapely.buffer(self.geometry, self.width / 2)
@@ -129,14 +131,17 @@ def write_svg(output, streets, pavements, crossings):
 def write_dxf(output, streets, pavements, crossings):
     pass
 
-def coords(transformer, base_x, base_y, geometry):
+def coords(transformer, base_x, base_y, limit_x, limit_y, geometry):
     def transform_xy_list(xy_list):
         return [(x-base_x, y-base_y)
                 for x, y in (transformer.transform(lon, lat)
                              for lon, lat in xy_list)]
     match geometry['type']:
         case 'LineString':
-            return shapely.LineString(transform_xy_list(geometry['coordinates']))
+            return shapely.clip_by_rect(shapely.LineString(transform_xy_list(geometry['coordinates'])),
+                                        base_x, base_y,
+                                        limit_x, limit_y,
+                                        )
         case 'Polygon':
             return shapely.Polygon([transform_xy_list(shape)
                                     for shape in geometry['coordinates']])
@@ -190,11 +195,11 @@ def osm_fetch_streets_in_bbox(west, south, east, north, verbose=False):
         if tags.get('highway') == 'footway':
             match tags.get('footway'):
                 case 'sidewalk':
-                    pavements.append(Pavement(coords(transformer, left, bottom, geometry)))
+                    pavements.append(Pavement(coords(transformer, left, bottom, right, top, geometry)))
                 case 'crossing':
-                    crossings.append(Crossing(coords(transformer, left, bottom, geometry)))
+                    crossings.append(Crossing(coords(transformer, left, bottom, right, top, geometry)))
         else:
-            street = Street(attributes=tags, geometry=coords(transformer, left, bottom, geometry))
+            street = Street(attributes=tags, geometry=coords(transformer, left, bottom, right, top, geometry))
             streets[street.name].append(street)
     return streets, pavements, crossings
 
