@@ -155,23 +155,24 @@ def coords(transformer, clip_rect, geometry):
     """Transform all the coordinates in a geometry, using a given transformer.
     This works whether the geometry has a single line or multiple lines.
     The result is clipped to be within the rectangle specified."""
+
     def transform_xy_list(xy_list):
         """Scale and translate a list of XY coordinate pairs."""
         return [(x-clip_rect[0], y-clip_rect[1])
                 for x, y in (transformer.transform(lon, lat)
                              for lon, lat in xy_list)]
+
+    def adjust(shape):
+        return shapely.clip_by_rect(shape,
+                                    0, 0,
+                                    clip_rect[2]-clip_rect[0],
+                                    clip_rect[3]-clip_rect[1])
+
     match geometry['type']:
         case 'LineString':
-            return shapely.clip_by_rect(shapely.LineString(transform_xy_list(geometry['coordinates'])),
-                                        0, 0,
-                                        clip_rect[2]-clip_rect[0], clip_rect[3]-clip_rect[1],
-                                        )
+            return adjust(shapely.LineString(transform_xy_list(geometry['coordinates'])))
         case 'Polygon':
-            return shapely.clip_by_rect(shapely.Polygon([transform_xy_list(shape)
-                                                         for shape in geometry['coordinates']]),
-                                        0, 0,
-                                        clip_rect[2]-clip_rect[0], clip_rect[3]-clip_rect[1],
-                                        )
+            return adjust(shapely.Polygon([transform_xy_list(shape) for shape in geometry['coordinates']]))
         case _:
             print("Unknown geometry type", _)
 
