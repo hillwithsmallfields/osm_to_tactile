@@ -211,7 +211,7 @@ def osm_fetch_streets_in_bbox(input_bbox,
         print("southwest", OSM_DEBUG_FORMAT % (input_bbox[1], input_bbox[0], input_bbox[1], input_bbox[0]))
         print("northeast", OSM_DEBUG_FORMAT % (input_bbox[3], input_bbox[2], input_bbox[3], input_bbox[2]))
     overpass = Overpass()
-    query = overpassQueryBuilder(bbox=input_bbox,
+    query = overpassQueryBuilder(bbox=[input_bbox[1], input_bbox[0], input_bbox[3], input_bbox[2]],
                                  elementType='way',
                                  selector='highway',
                                  includeGeometry=True,
@@ -277,7 +277,8 @@ def osm_to_tactile_main(
         south = latitude - size_scale * (height/2)
         east = longitude + size_scale * (width/2)
         north = latitude + size_scale * (height/2)
-    bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north])
+    bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north],
+                                                                    verbose=verbose)
     if verbose:
         show(streets, pavements, crossings)
     print("output is", output)
