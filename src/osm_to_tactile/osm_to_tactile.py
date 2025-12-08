@@ -31,6 +31,8 @@ def get_args():
     parser.add_argument("--height", "-H", type=float)
     parser.add_argument("--scale", "-z", type=float, default=5000)
     parser.add_argument("--squash", "-q", type=float, default=1.0)
+    parser.add_argument("--jigsaw", "-j",
+                        help="""Make a geocoded edge.""")
     parser.add_argument("--output", "-o")
     parser.add_argument("--verbose", "-v", action='store_true')
     return vars(parser.parse_args())
@@ -271,6 +273,7 @@ def osm_to_tactile_main(
         centre=None, metres=None, width=None, height=None,
         scale=5000,
         squash=1.0,
+        jigsaw=None,
         output=None,
         verbose=False):
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
