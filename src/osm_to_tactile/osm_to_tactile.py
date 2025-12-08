@@ -136,7 +136,16 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
-def write_svg(output, bbox, streets, pavements, crossings, scale=1.0):
+def cut_edges(width, height, jigsaw):
+    """Return the SVG text for cutting out the shape of the tile."""
+    print("making cut edges for", width, height)
+    return ('<path d="M 0 0'
+            + " L %f 0" % width
+            + " L %f %f" % (width, height)
+            + " L 0 %f" % height
+            +' z" fill="none" stroke="red" stroke_width="1"/>\n')
+
+def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw=""):
     """Write the map as SVG."""
     # TODO: flip rotate coordinates
     left, bottom, right, top = bbox
@@ -152,10 +161,11 @@ def write_svg(output, bbox, streets, pavements, crossings, scale=1.0):
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
         outstream.write("<g>\n")
-        cuts = islands.svg()
+        shapes = islands.svg()
         if PRETTY_PRINT_SVG:
-            cuts = cuts.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
-        outstream.write(cuts)
+            shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
+        outstream.write(shapes)
+        outstream.write(cut_edges(width, height, jigsaw))
         outstream.write("</g>\n")
         outstream.write("</svg>\n")
 
@@ -303,9 +313,9 @@ def osm_to_tactile_main(
     if output:
         match os.path.splitext(output)[1]:
             # case '.dxf':
-            #     write_dxf(output, bbox, streets, pavements, crossings)
+            #     write_dxf(output, bbox, streets, pavements, crossings, scale=1000/scale, jigsaw=jigsaw)
             case '.svg':
-                write_svg(output, bbox, streets, pavements, crossings, scale=1000/scale)
+                write_svg(output, bbox, streets, pavements, crossings, scale=1000/scale, jigsaw=jigsaw)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
