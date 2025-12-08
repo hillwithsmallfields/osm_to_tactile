@@ -14,6 +14,10 @@ import pyproj
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 import ezdxf
 
+OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
+PRETTY_PRINT_SVG = True
+LANE_WIDTH = 3
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bbox", "-b", type=float, nargs=4)
@@ -30,8 +34,6 @@ def get_args():
     parser.add_argument("--output", "-o")
     parser.add_argument("--verbose", "-v", action='store_true')
     return vars(parser.parse_args())
-
-OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 
 class LinearWay:
 
@@ -72,7 +74,7 @@ class Street(LinearWay):
                  subtype=None,
                  ):
         super().__init__(geometry=geometry,
-                         width=4, # TODO: set according to street data
+                         width=LANE_WIDTH*int(attributes.get('lanes', '2')),
                          )
         self.attributes = attributes
         self.name = name or attributes.get('name', "<anon>")
@@ -128,8 +130,6 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
-PRETTY_PRINT = True
-
 def write_svg(output, bbox, streets, pavements, crossings):
     """Write the map as SVG."""
     # TODO: flip rotate coordinates
@@ -141,7 +141,7 @@ def write_svg(output, bbox, streets, pavements, crossings):
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
         outstream.write("<g>\n")
         cuts = islands.svg()
-        if PRETTY_PRINT:
+        if PRETTY_PRINT_SVG:
             cuts = cuts.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(cuts)
         outstream.write("</g>\n")
@@ -156,7 +156,7 @@ def coords(transformer, clip_rect, geometry):
     This works whether the geometry has a single line or multiple lines.
     The result is clipped to be within the rectangle specified."""
     def transform_xy_list(xy_list):
-        """Translate and scale a list of XY coordinate pairs."""
+        """Scale and translate a list of XY coordinate pairs."""
         return [(x-clip_rect[0], y-clip_rect[1])
                 for x, y in (transformer.transform(lon, lat)
                              for lon, lat in xy_list)]
