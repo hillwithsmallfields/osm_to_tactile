@@ -136,13 +136,26 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
+def jigsaw_edge(jigsaw_spec, edge):
+    return ((jigsaw_spec == "all")
+            or (edge in jigsaw_spec))
+
 def cut_edges(width, height, jigsaw):
     """Return the SVG text for cutting out the shape of the tile."""
     print("making cut edges for", width, height)
     return ('<path d="M 0 0'
-            + " L %f 0" % width
-            + " L %f %f" % (width, height)
-            + " L 0 %f" % height
+            + ((" L %f 0" % width)
+               if jigsaw_edge(jigsaw, "south")
+               else (" L %f 0" % width))
+            + ((" L %f %f" % (width, height))
+               if jigsaw_edge(jigsaw, "east")
+               else (" L %f %f" % (width, height)))
+            + ((" L 0 %f" % height)
+               if jigsaw_edge(jigsaw, "north")
+               else (" L 0 %f" % height))
+            + ((" L 0 0")
+               if jigsaw_edge(jigsaw, "west")
+               else (" L 0 0"))
             +' z" fill="none" stroke="red" stroke_width="1"/>\n')
 
 def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw=""):
@@ -165,7 +178,7 @@ def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw="")
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
-        outstream.write(cut_edges(width, height, jigsaw))
+        outstream.write(cut_edges(width, height, jigsaw or ""))
         outstream.write("</g>\n")
         outstream.write("</svg>\n")
 
