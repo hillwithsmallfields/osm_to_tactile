@@ -7,12 +7,10 @@ import os
 
 from collections import defaultdict
 
-import svg
-import dobishem.storage as storage
 import shapely
 import pyproj
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
-import ezdxf
+# import ezdxf
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
@@ -158,9 +156,9 @@ def write_svg(output, bbox, streets, pavements, crossings, scale=1.0):
         outstream.write("</g>\n")
         outstream.write("</svg>\n")
 
-def write_dxf(output, bbox, streets, pavements, crossings):
-    """Write the map as DXF."""
-    pass
+# def write_dxf(output, bbox, streets, pavements, crossings):
+#     """Write the map as DXF."""
+#     pass
 
 def coords(transformer, clip_rect, geometry):
     """Transform all the coordinates in a geometry, using a given transformer.
@@ -300,8 +298,8 @@ def osm_to_tactile_main(
     print("output is", output)
     if output:
         match os.path.splitext(output)[1]:
-            case '.dxf':
-                write_dxf(output, bbox, streets, pavements, crossings)
+            # case '.dxf':
+            #     write_dxf(output, bbox, streets, pavements, crossings)
             case '.svg':
                 write_svg(output, bbox, streets, pavements, crossings, scale=1000/scale)
 
