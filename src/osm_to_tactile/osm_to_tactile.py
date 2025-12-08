@@ -143,20 +143,20 @@ def jigsaw_edge(jigsaw_spec, edge):
 def cut_edges(width, height, jigsaw):
     """Return the SVG text for cutting out the shape of the tile."""
     print("making cut edges for", width, height)
-    return ('<path d="M 0 0'
-            + ((" L %f 0" % width)
+    return ('\n  <path d="M 0 0'
+            + (("\n    L %f 0" % width)
                if jigsaw_edge(jigsaw, "south")
-               else (" L %f 0" % width))
-            + ((" L %f %f" % (width, height))
+               else ("\n    L %f 0" % width))
+            + (("\n    L %f %f" % (width, height))
                if jigsaw_edge(jigsaw, "east")
-               else (" L %f %f" % (width, height)))
-            + ((" L 0 %f" % height)
+               else ("\n    L %f %f" % (width, height)))
+            + (("\n    L 0 %f" % height)
                if jigsaw_edge(jigsaw, "north")
-               else (" L 0 %f" % height))
-            + ((" L 0 0")
+               else ("\n    L 0 %f" % height))
+            + (("\n    L 0 0")
                if jigsaw_edge(jigsaw, "west")
-               else (" L 0 0"))
-            +' z" fill="none" stroke="red" stroke_width="1"/>\n')
+               else ("\n    L 0 0"))
+            +'\n    z" fill="none" stroke="red" stroke_width="1"/>\n')
 
 def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw=""):
     """Write the map as SVG."""
@@ -173,13 +173,13 @@ def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw="")
     )
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        outstream.write("<g>\n")
+        # outstream.write("<g>\n")
         shapes = islands.svg()
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
         outstream.write(cut_edges(width, height, jigsaw or ""))
-        outstream.write("</g>\n")
+        # outstream.write("</g>\n")
         outstream.write("</svg>\n")
 
 # def write_dxf(output, bbox, streets, pavements, crossings):
