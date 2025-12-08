@@ -31,6 +31,8 @@ def get_args():
                         help="""Treat size and width as approximate metres""")
     parser.add_argument("--width", "-W", type=float)
     parser.add_argument("--height", "-H", type=float)
+    parser.add_argument("--scale", "-z", type=float, default=5000)
+    parser.add_argument("--squash", "-q", type=float, default=1.0)
     parser.add_argument("--output", "-o")
     parser.add_argument("--verbose", "-v", action='store_true')
     return vars(parser.parse_args())
@@ -39,9 +41,12 @@ class LinearWay:
 
     """Common parent class for all linear ways (streets, pavements, crossings)."""
 
-    def __init__(self, geometry=None, width=1):
+    def __init__(self, geometry=None, width=1, squash=1):
         self.geometry = geometry
         self.width = width
+        # make all ways thinner by this factor, because otherwise they
+        # can be drawn too thick on large-scale maps:
+        self.squash = squash
 
     def coords(self):
         """Return the coordinate list for this way."""
@@ -56,7 +61,7 @@ class LinearWay:
         """Return a 2D solid representing this way.
 
         A way has no width; the solid form of it has width."""
-        return shapely.buffer(self.geometry, self.width / 2)
+        return shapely.buffer(self.geometry, self.width / (2 * self.squash))
 
 class Street(LinearWay):
 
@@ -72,10 +77,10 @@ class Street(LinearWay):
                  attributes=None,
                  name=None,
                  subtype=None,
-                 ):
+                 **kwargs):
         super().__init__(geometry=geometry,
                          width=LANE_WIDTH*int(attributes.get('lanes', '2')),
-                         )
+                         **kwargs)
         self.attributes = attributes
         self.name = name or attributes.get('name', "<anon>")
         self.subtype = subtype or attributes.get('highway')
@@ -99,10 +104,10 @@ class Pavement(LinearWay):
     def __init__(self,
                  geometry,
                  type=None,
-                 ):
+                 **kwargs):
         super().__init__(geometry=geometry,
                          width=1,
-                         )
+                         **kwargs)
 
     def __str__(self):
         return f"<Pavement {self.geometry}>"
@@ -118,10 +123,10 @@ class Crossing(LinearWay):
     def __init__(self,
                  geometry,
                  type=None,
-                 ):
+                 **kwargs):
         super().__init__(geometry=geometry,
                          width=2,
-                         )
+                         **kwargs)
 
     def __str__(self):
         return f"<Crossing {self.geometry}>"
@@ -130,11 +135,10 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
-def write_svg(output, bbox, streets, pavements, crossings):
+def write_svg(output, bbox, streets, pavements, crossings, scale=1.0):
     """Write the map as SVG."""
     # TODO: flip rotate coordinates
     left, bottom, right, top = bbox
-    scale = 0.5
     width = (right - left) * scale
     height = (top - bottom) * scale
     islands = shapely.affinity.rotate(
@@ -203,6 +207,7 @@ def show(streets, pavements, crossings):
 
 def osm_fetch_streets_in_bbox(input_bbox,
                               projection="EPSG:3857",
+                              squash=1.0,
                               verbose=False):
     """Fetch all the streets, pavements and crossings in the given rectangle.
 
@@ -242,11 +247,11 @@ def osm_fetch_streets_in_bbox(input_bbox,
         if tags.get('highway') == 'footway':
             match tags.get('footway'):
                 case 'sidewalk':
-                    pavements.append(Pavement(coords(transformer, output_bbox, geometry)))
+                    pavements.append(Pavement(coords(transformer, output_bbox, geometry), squash=squash))
                 case 'crossing':
-                    crossings.append(Crossing(coords(transformer, output_bbox, geometry)))
+                    crossings.append(Crossing(coords(transformer, output_bbox, geometry), squash=squash))
         else:
-            street = Street(attributes=tags, geometry=coords(transformer, output_bbox, geometry))
+            street = Street(attributes=tags, geometry=coords(transformer, output_bbox, geometry), squash=squash)
             streets[street.name].append(street)
     return output_bbox, streets, pavements, crossings
 
@@ -265,6 +270,8 @@ def osm_to_tactile_main(
         osmurl=None,
         west=None, south=None, east=None, north=None,
         centre=None, metres=None, width=None, height=None,
+        scale=5000,
+        squash=1.0,
         output=None,
         verbose=False):
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
@@ -286,6 +293,7 @@ def osm_to_tactile_main(
         east = longitude + size_scale * (width/2)
         north = latitude + size_scale * (height/2)
     bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north],
+                                                                    squash=squash,
                                                                     verbose=verbose)
     if verbose:
         show(streets, pavements, crossings)
@@ -295,7 +303,7 @@ def osm_to_tactile_main(
             case '.dxf':
                 write_dxf(output, bbox, streets, pavements, crossings)
             case '.svg':
-                write_svg(output, bbox, streets, pavements, crossings)
+                write_svg(output, bbox, streets, pavements, crossings, scale=1000/scale)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
