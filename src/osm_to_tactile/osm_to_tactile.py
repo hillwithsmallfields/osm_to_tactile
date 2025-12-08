@@ -54,6 +54,7 @@ class LinearWay:
             print("error:", e)
             print("when trying to get coords of", self.geometry)
             print("geometry.geoms is", self.geometry.geoms)
+            return None
 
     def solid(self):
         """Return a 2D solid representing this way.
