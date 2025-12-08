@@ -134,9 +134,16 @@ def write_svg(output, bbox, streets, pavements, crossings):
     """Write the map as SVG."""
     # TODO: flip rotate coordinates
     left, bottom, right, top = bbox
-    width = right - left
-    height = top - bottom
-    islands = convert_to_islands(streets, pavements, crossings)
+    scale = 0.5
+    width = (right - left) * scale
+    height = (top - bottom) * scale
+    islands = shapely.affinity.rotate(
+        shapely.affinity.scale(
+            convert_to_islands(streets, pavements, crossings),
+            xfact=scale, yfact=scale,
+            origin=(0.0, 0.0)),
+        angle=-90,
+    )
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
         outstream.write("<g>\n")
