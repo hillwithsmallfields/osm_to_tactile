@@ -143,6 +143,7 @@ def jigsaw_edge(jigsaw_spec, edge):
 def cut_edges(width, height, jigsaw):
     """Return the SVG text for cutting out the shape of the tile."""
     print("making cut edges for", width, height)
+    # TODO: use https://www.w3.org/TR/SVG2/paths.html#PathDataCubicBezierCommands
     return ('\n  <path d="M 0 0'
             + (("\n    L %f 0" % width)
                if jigsaw_edge(jigsaw, "south")
@@ -173,13 +174,11 @@ def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw="")
     )
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        # outstream.write("<g>\n")
         shapes = islands.svg()
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
         outstream.write(cut_edges(width, height, jigsaw or ""))
-        # outstream.write("</g>\n")
         outstream.write("</svg>\n")
 
 # def write_dxf(output, bbox, streets, pavements, crossings):
