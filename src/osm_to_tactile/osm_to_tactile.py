@@ -13,6 +13,8 @@ import pyproj
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 # import ezdxf
 
+from braille_to_geometry.braille_to_geometry import BrailleDotterUKAAF
+
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
 LANE_WIDTH = 3
@@ -168,16 +170,19 @@ class LinearWay:
         in their natural order."""
         if self._segments is None:
             coords = self.coords()
-            self._segments = list(zip(coords[:-1], coords[1:]))
+            if coords:
+                self._segments = list(zip(coords[:-1], coords[1:]))
         return self._segments
 
     def longest_segments(self):
         """Return a list of the straight-line segments of this way,
         in descending order of length."""
         if self._longest_segments is None:
-            self._longest_segments = sorted(self.segments(),
-                                            key=lambda seg: math.dist(*seg),
-                                            reverse=True)
+            segments = self.segments()
+            if segments:
+                self._longest_segments = sorted(segments,
+                                                key=lambda seg: math.dist(*seg),
+                                                reverse=True)
         return self._longest_segments
 
     def solid(self):
@@ -468,19 +473,66 @@ def combine_street_segments(street_group):
         street_group = next_stage
     return street_group
 
+def transform_label_geometry(geometry, x, y, label_width, label_height, rotation):
+    return shapely.affinity.translate(
+        shapely.affinity.rotate(
+            shapely.affinity.translate(
+                geometry,
+                # I have not yet understood this part of the placement, but will keep looking at it
+                # xoff=label_width/2,
+                # yoff=label_height*2
+                xoff=0,
+                yoff=0
+            ),
+            rotation),
+        xoff=x, yoff=y)
+
 def prepare_map(streets, pavements=None, crossings=None):
     """Prepare the map for output."""
     merged_streets = {}
     for name, street_group in streets.items():
         merged_streets[name] = combine_street_segments(street_group)
+    map_shapes = convert_to_islands(merged_streets, pavements, crossings)
+    dotter = BrailleDotterUKAAF()
     for name, street_group in merged_streets.items():
-        # don't label very fragmented streets
-        if name != "<anon>" and len(street_group) < 5:
-            print("would like to add label for", name)
+        # don't label highly fragmented streets
+        if name != "<anon>" and len(street_group) <= 3:
             for street in street_group:
-                print("    ", street, "aka", street.shortened_name())
-    islands = convert_to_islands(merged_streets, pavements, crossings)
-    return islands
+                # Make the label, and a bounding box for it (for faster clash comparisons):
+                label_text = street.shortened_name()
+                label_bbox = dotter.text_to_bbox(label_text)
+                label_width, label_height = dotter.text_dimensions(label_text)
+                label = dotter.text_to_dots(label_text)
+                possible_label_segments = street.longest_segments()
+                # Try placing the label bbox next to each of the
+                # straight-line segments, starting with the longest,
+                # and check whether it is free from clashes with
+                # anything already drawn (whether the base map, or
+                # previously added labels):
+                if possible_label_segments:
+                    taken = None
+                    for i, seg in enumerate(possible_label_segments):
+                        seg_mid_x = (seg[0][0] + seg[1][0]) / 2
+                        seg_mid_y = (seg[0][1] + seg[1][1]) / 2
+                        rotation = math.degrees(math.atan2(seg[1][1] - seg[0][1], seg[1][0] - seg[0][0]))
+                        if shapely.disjoint(map_shapes, transform_label_geometry(label_bbox,
+                                                                                 seg_mid_x, seg_mid_y,
+                                                                                 label_width, label_height,
+                                                                                 rotation)):
+                            map_shapes = shapely.union(map_shapes,
+                                                       transform_label_geometry(label,
+                                                                                seg_mid_x, seg_mid_y,
+                                                                                label_width, label_height,
+                                                                                rotation))
+                            taken = i
+                            break;
+                    if taken is None:
+                        print("Could not find a non-clashing label position for", name)
+                    else:
+                        print("Took label position choice", taken+1, "for", name)
+                else:
+                    print("No possible label placements for", name)
+    return map_shapes
 
 def osm_to_tactile_main(
         bbox=None,
