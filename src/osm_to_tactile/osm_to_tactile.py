@@ -3,6 +3,7 @@
 """Program to output laser-cutter data from OSM."""
 
 import argparse
+import math
 import os
 
 from collections import defaultdict
@@ -86,6 +87,8 @@ class LinearWay:
         # make all ways thinner by this factor, because otherwise they
         # can be drawn too thick on large-scale maps:
         self.squash = squash
+        self._segments = None
+        self._longest_segments = None
 
     def coords(self):
         """Return the coordinate list for this way."""
@@ -96,6 +99,23 @@ class LinearWay:
             print("when trying to get coords of", self.geometry)
             print("geometry.geoms is", self.geometry.geoms)
             return None
+
+    def segments(self):
+        """Return a list of the straight-line segments of this way,
+        in their natural order."""
+        if self._segments is None:
+            coords = self.coords()
+            self._segments = list(zip(coords[:-1], coords[1:]))
+        return self._segments
+
+    def longest_segments(self):
+        """Return a list of the straight-line segments of this way,
+        in descending order of length."""
+        if self._longest_segments is None:
+            self._longest_segments = sorted(self.segments(),
+                                            key=lambda seg: math.dist(*seg),
+                                            reverse=True)
+        return self._longest_segments
 
     def solid(self):
         """Return a 2D solid representing this way.
