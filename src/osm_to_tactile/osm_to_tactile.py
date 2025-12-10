@@ -18,23 +18,62 @@ LANE_WIDTH = 3
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bbox", "-b", type=float, nargs=4)
-    parser.add_argument("--osmurl", "-u")
-    parser.add_argument("--west", "-w", type=float)
-    parser.add_argument("--south", "-s", type=float)
-    parser.add_argument("--east", "-e", type=float)
-    parser.add_argument("--north", "-n", type=float)
-    parser.add_argument("--centre", "-c", type=float, nargs=2)
-    parser.add_argument("--metres", "--metric", "-m", action='store_true',
-                        help="""Treat size and width as approximate metres""")
-    parser.add_argument("--width", "-W", type=float)
-    parser.add_argument("--height", "-H", type=float)
-    parser.add_argument("--scale", "-z", type=float, default=5000)
-    parser.add_argument("--squash", "-q", type=float, default=1.0)
-    parser.add_argument("--jigsaw", "-j",
-                        help="""Make a geocoded edge.""")
-    parser.add_argument("--output", "-o")
-    parser.add_argument("--verbose", "-v", action='store_true')
+    parser.add_argument(
+        "--bbox", "-b",
+        type=float, nargs=4,
+        help="""The bounding box of the area to convert, in longitude and latitude.
+        Give this as four numbers, in this order: West, South, East, North.
+        Use this with --width and --height to specify the area to convert.""")
+    parser.add_argument(
+        "--osmurl", "-u",
+        help="""The OSM URL of the centre of the area to convert.""")
+    parser.add_argument(
+        "--west", "-w", type=float,
+        help="""The longitude of the west edge of the area to convert.""")
+    parser.add_argument(
+        "--south", "-s", type=float,
+        help="""The latitude of the south edge of the area to convert.""")
+    parser.add_argument(
+        "--east", "-e", type=float,
+        help="""The longitude of the east edge of the area to convert.""")
+    parser.add_argument(
+        "--north", "-n", type=float,
+        help="""The latitude of the north edge of the area to convert.""")
+    parser.add_argument(
+        "--centre", "-c",
+        type=float, nargs=2,
+        help="""The centre of the area to convert, as longitude and latitude.""")
+    parser.add_argument(
+        "--metres", "--metric", "-m",
+        action='store_true',
+        help="""Treat size and width as approximate metres""")
+    parser.add_argument(
+        "--width", "-W",
+        type=float)
+    parser.add_argument(
+        "--height", "-H",
+        type=float)
+    parser.add_argument(
+        "--scale", "-z",
+        type=float, default=5000,
+        help="""The scale of the map to produce, assuming the output is in millimeters.
+        For example, giving 5000 here produces a 1:5000 scale map.""")
+    parser.add_argument(
+        "--squash", "-q",
+        type=float, default=1.0,
+        help="""How much to squash roads so they don't take up too
+        much space on the map.""")
+    parser.add_argument(
+        "--jigsaw", "-j",
+        help="""Make interlocking patterns along the edges.
+        Not yet implemented.""")
+    parser.add_argument(
+        "--output", "-o",
+        help="""The name of the output file.
+        The output format is deduced from the extension; currently only .svg is supported.""")
+    parser.add_argument(
+        "--verbose", "-v",
+        action='store_true')
     return vars(parser.parse_args())
 
 class LinearWay:
