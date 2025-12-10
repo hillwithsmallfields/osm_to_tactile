@@ -17,6 +17,30 @@ OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
 LANE_WIDTH = 3
 
+NAME_PREFIXES = {
+    'ca': ["Carrer de ", "Avinguda de ", "Travessera de "],
+    'es': ["Carrer de ", "Avinguda de ", "Travessera de ", "Calle "],
+    'fr': ["Rue ", "Chaussée ", "Place ", "Avenue d'", "Avenue des", "Avenue du'", "Avenue "],
+    'pl': ["Aleja ", "Plac "],
+    'pt': ["Rua ", "Calçada da ", "Praça ", "Avenida "],
+    'sq': ["Rruga i ", "Rruga e ", "Rruga ", "Sheshi", "Shëshitorja ", "Bulevardi "],
+    'uk': ["вулиця "],
+}
+
+NAME_SUFFIXES = {
+    'da': ["gade", "vang", " Vej", " Gade", "varden", " Allé", "pladsen", " Stræde", " Gård", "vej"],
+    'de': ["-Weg", "weg", "-Ring", " Winkel", "pfad", "markt", "straße"],
+    'en': [" Road", " Street", " Square"],
+    'eu': [" kalea"],
+    'fi': ["katu"],
+    'hu': [" utca", " tér"],
+    'nl': ["straat", "plein", "laan", "steenweg", "steeg", "brug", "gracht"],
+    'no': [" allé", " gate", "veien", "gata", "plass", "stredet"],
+    'ru': [" переулок", " улица"],
+    'se': ["gatan", "vägen", "väg", "stigen"],
+    'uk': [" провулок"],
+}
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -55,6 +79,12 @@ def get_args():
         "--height", "-H",
         type=float)
     parser.add_argument(
+        "--language", "-l",
+        help="""The language to use for street names.
+        This is in the format used by OSM, typically an ISO 639
+        language code, so for example --language nl will select the
+        Dutch names which are given as name:nl in the map data.""")
+    parser.add_argument(
         "--scale", "-z",
         type=float, default=5000,
         help="""The scale of the map to produce, assuming the output is in millimeters.
@@ -89,6 +119,39 @@ class LinearWay:
         self.squash = squash
         self._segments = None
         self._longest_segments = None
+
+    def __iadd__(self, other):
+        """Add another way into this one, if they have endpoints in common."""
+        my_coords = self.coords()
+        their_coords = other.coords()
+        new_coords = None
+        if hasattr(self, 'type') and hasattr(other, 'type') and self.type != other.type:
+            raise ValueError("Type mismatch")
+        if my_coords[-1] == their_coords[0]:
+            if their_coords[-1] == my_coords[0]:
+                raise ValueError("Both endpoints in common")
+            new_coords = my_coords + their_coords[1:]
+        elif their_coords[-1] == my_coords[0]:
+            new_coords = their_coords + my_coords[1:]
+        elif my_coords[0] == their_coords[0]:
+            new_coords = my_coords + list(reversed(their_coords[1]))
+        elif my_coords[-1] == their_coords[-1]:
+            new_coords = my_coords + list(reversed(their_coords[:-1]))
+        else:
+            raise ValueError("No common endpoints")
+        # print("new_coords", new_coords)
+        self.geometry = shapely.LineString(new_coords)
+        for k, v in other.attributes.items():
+            if k in self.attributes:
+                if v != self.attributes[k]:
+                    self.attributes[k] += ("; " + v)
+            else:
+                 self.attributes[k] = v
+        self.width = (self.width + other.width) / 2
+        # reset the cache slots
+        self._segments = None
+        self._longest_segments = None
+        return self
 
     def coords(self):
         """Return the coordinate list for this way."""
@@ -137,12 +200,21 @@ class Street(LinearWay):
                  attributes=None,
                  name=None,
                  subtype=None,
+                 language=None,
                  **kwargs):
         super().__init__(geometry=geometry,
                          width=LANE_WIDTH*int(attributes.get('lanes', '2')),
                          **kwargs)
         self.attributes = attributes
-        self.name = name or attributes.get('name', "<anon>")
+        if name:
+            self.name = name
+        elif language:
+            self.name = (attributes.get('name:' + language)
+                         or attributes.get('name', "<anon>"))
+        else:
+            self.name = attributes.get('name', "<anon>")
+        self.language = language
+        self._shortened_name = None
         self.subtype = subtype or attributes.get('highway')
         if not attributes:
             self.attributes = {'name': self.name,
@@ -150,6 +222,21 @@ class Street(LinearWay):
 
     def __str__(self):
         return f"<Street {self.subtype} {self.name} {self.geometry}>"
+
+    def __repr__(self):
+        return f"<Street {self.subtype} {self.name} {self.geometry}>"
+
+    def shortened_name(self):
+        if self._shortened_name is None:
+            name = self.name
+            if (prefixes := NAME_PREFIXES.get(self.language)):
+                for prefix in prefixes:
+                    name = name.removeprefix(prefix)
+            if (suffixes := NAME_SUFFIXES.get(self.language)):
+                for suffix in suffixes:
+                    name = name.removesuffix(suffix)
+            self._shortened_name = name
+        return self._shortened_name
 
     def json(self):
         return {'type': 'street',
@@ -220,13 +307,12 @@ def cut_edges(width, height, jigsaw):
 
 def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw=""):
     """Write the map as SVG."""
-    # TODO: flip rotate coordinates
     left, bottom, right, top = bbox
     width = (right - left) * scale
     height = (top - bottom) * scale
     islands = shapely.affinity.rotate(
         shapely.affinity.scale(
-            convert_to_islands(streets, pavements, crossings),
+            prepare_map(streets, pavements, crossings),
             xfact=scale, yfact=scale,
             origin=(0.0, 0.0)),
         angle=-90,
@@ -289,6 +375,7 @@ def show(streets, pavements, crossings):
 
 def osm_fetch_streets_in_bbox(input_bbox,
                               projection="EPSG:3857",
+                              language=None,
                               squash=1.0,
                               verbose=False):
     """Fetch all the streets, pavements and crossings in the given rectangle.
@@ -333,7 +420,10 @@ def osm_fetch_streets_in_bbox(input_bbox,
                 case 'crossing':
                     crossings.append(Crossing(coords(transformer, output_bbox, geometry), squash=squash))
         else:
-            street = Street(attributes=tags, geometry=coords(transformer, output_bbox, geometry), squash=squash)
+            street = Street(attributes=tags,
+                            geometry=coords(transformer, output_bbox, geometry),
+                            language=language,
+                            squash=squash)
             streets[street.name].append(street)
     return output_bbox, streets, pavements, crossings
 
@@ -347,11 +437,57 @@ def convert_to_islands(streets, pavements=None, crossings=None):
                              + [p.solid() for p in pavements] if pavements else []
                              + [c.solid() for c in crossings] if pavements else [])
 
+def combine_street_segments(street_group):
+    """Return a list of streets which have been merged as far as possible.
+
+    Streets may be merged if they have ends in common."""
+    if len(street_group) == 1:
+        return street_group
+    old_len = -1
+    while len(street_group) > 1 and len(street_group) != old_len:
+        next_stage = []
+        old_len = len(street_group)
+        base = street_group[0]
+        for other in street_group[1:]:
+            try:
+                base += other
+            except ValueError:
+                # We couldn't combine other with anything yet, so pass
+                # it unchanged into the next stage:
+                next_stage.append(other)
+            except TypeError as e:
+                # Sometimes we get individual coordinates where I was
+                # expecting coordinate pairs; not yet sure what is
+                # going on there, but we can probably tolerate just
+                # not merging them.
+                next_stage.append(other)
+        # Pass the one we have been accumulating, into the next stage.
+        # It goes at the end of the list, so it won't be picked as the
+        # accumulator next time round the loop.
+        next_stage.append(base)
+        street_group = next_stage
+    return street_group
+
+def prepare_map(streets, pavements=None, crossings=None):
+    """Prepare the map for output."""
+    merged_streets = {}
+    for name, street_group in streets.items():
+        merged_streets[name] = combine_street_segments(street_group)
+    for name, street_group in merged_streets.items():
+        # don't label very fragmented streets
+        if name != "<anon>" and len(street_group) < 5:
+            print("would like to add label for", name)
+            for street in street_group:
+                print("    ", street, "aka", street.shortened_name())
+    islands = convert_to_islands(merged_streets, pavements, crossings)
+    return islands
+
 def osm_to_tactile_main(
         bbox=None,
         osmurl=None,
         west=None, south=None, east=None, north=None,
         centre=None, metres=None, width=None, height=None,
+        language=None,
         scale=5000,
         squash=1.0,
         jigsaw=None,
@@ -376,6 +512,7 @@ def osm_to_tactile_main(
         east = longitude + size_scale * (width/2)
         north = latitude + size_scale * (height/2)
     bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north],
+                                                                    language=language,
                                                                     squash=squash,
                                                                     verbose=verbose)
     if verbose:
