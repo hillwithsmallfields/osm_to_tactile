@@ -13,7 +13,7 @@ import pyproj
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 # import ezdxf
 
-from braille_to_geometry.braille_to_geometry import BrailleDotterUKAAF
+from braille_to_geometry.braille_to_geometry import BrailleDotterUKAAF, Diamond, Square, Octagon
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
@@ -486,7 +486,9 @@ def prepare_map(streets, pavements=None, crossings=None):
     for name, street_group in streets.items():
         merged_streets[name] = combine_street_segments(street_group)
     map_shapes = convert_to_islands(merged_streets, pavements, crossings)
-    dotter = BrailleDotterUKAAF()
+    dotter = BrailleDotterUKAAF(dot_shape=Square,
+                                scale=1.25,
+                                dot_size=.5)
     for name, street_group in merged_streets.items():
         # don't label highly fragmented streets
         if name != "<anon>" and len(street_group) <= 3:
