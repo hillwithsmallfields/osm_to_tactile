@@ -72,10 +72,14 @@ def get_args():
         help="""The centre of the area to convert, as longitude and latitude.""")
     parser.add_argument(
         "--width", "-W",
-        type=float)
+        type=float,
+        help="""The width of the resulting map, nominally in millimetres.
+        The actual size depends on downstream software and hardware.""")
     parser.add_argument(
         "--height", "-H",
-        type=float)
+        type=float,
+        help="""The heigth of the resulting map, nominally in millimetres.
+        The actual size depends on downstream software and hardware.""")
     parser.add_argument(
         "--pieces", "-p",
         nargs=2, type=int,
@@ -348,6 +352,11 @@ def write_svg(output, bbox, pieces, drawable, jigsaw=""):
 # def write_dxf(output, bbox, streets, pavements, crossings):
 #     """Write the map as DXF."""
 #     pass
+
+def show_list_value(label, lv):
+    lv = list(lv)
+    print(label, lv)
+    return lv
 
 def coords(transformer, clip_rect, geometry):
     """Transform all the coordinates in a geometry, using a given transformer.
