@@ -71,10 +71,6 @@ def get_args():
         type=float, nargs=2,
         help="""The centre of the area to convert, as longitude and latitude.""")
     parser.add_argument(
-        "--metres", "--metric", "-m",
-        action='store_true',
-        help="""Treat size and width as approximate metres""")
-    parser.add_argument(
         "--width", "-W",
         type=float)
     parser.add_argument(
@@ -308,7 +304,7 @@ def cut_edges(width, height, jigsaw):
             + (("\n    L 0 0")
                if jigsaw_edge(jigsaw, "west")
                else ("\n    L 0 0"))
-            +'\n    z" fill="none" stroke="red" stroke_width="1"/>\n')
+            +'\n    z" fill="none" stroke="green" stroke_width="1"/>\n')
 
 def write_svg(output, bbox, drawable, scale=1.0, jigsaw=""):
     """Write the map as SVG."""
@@ -400,6 +396,7 @@ def osm_fetch_streets_in_bbox(input_bbox,
 
     transformer = pyproj.Transformer.from_crs("EPSG:4326", projection)
     output_bbox = transformer.transform_bounds(input_bbox[0], input_bbox[1], input_bbox[2], input_bbox[3])
+    print("output_bbox in projection coordinates:", output_bbox)
 
     ways = osm_data.ways()
     streets = defaultdict(list)
@@ -529,42 +526,51 @@ def prepare_map(streets, pavements=None, crossings=None):
                     print("No possible label placements for", name)
     return map_shapes
 
+APPROX_METRES_PER_DEGREE = 111320
+
 def osm_to_tactile_main(
         bbox=None,
-        osmurl=None,
         west=None, south=None, east=None, north=None,
-        centre=None, metres=None, width=None, height=None,
-        language=None,
+        osmurl=None,
+        centre=None,
+        width=None, height=None, # output map size in millimetres
         scale=5000,
+        language=None,
         squash=1.0,
         jigsaw=None,
         output=None,
         verbose=False):
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
     The rectangle can be specified as a bounding box or as a centre and width and height."""
-    size_scale = 1/111320 if metres else 1
-    if bbox:
-        west, south, east, north = bbox
-    elif centre and width and height:
-        west = centre[0] - width/2
-        south = centre[1] - height/2
-        east = centre[0] + width/2
-        north = centre[1] + height/2
-    elif osmurl and width and height:
-        latitude, longitude = osmurl.split("=")[1].split("/")[1:]
-        latitude = float(latitude)
-        longitude = float(longitude)
-        west = longitude - size_scale * (width/2)
-        south = latitude - size_scale * (height/2)
-        east = longitude + size_scale * (width/2)
-        north = latitude + size_scale * (height/2)
+    if not west and not south and not east and not north:
+        if bbox:
+            west, south, east, north = bbox
+            # TODO: calculate scale
+        elif width and height:
+            if osmurl:
+                latitude, longitude = [float(arg) for arg in osmurl.split("=")[1].split("/")[1:]]
+            elif centre:
+                latitude, longitude = centre
+            ground_half_width_in_degrees = (((width / 2000 # map half width in metres
+                                           ) * scale)      # ground half width in metres
+                                            / APPROX_METRES_PER_DEGREE)
+            ground_half_height_in_degrees = (((height / 2000 # map half height in metres
+                                            ) * scale)       # ground half height in metres
+                                             / APPROX_METRES_PER_DEGREE)
+            west = longitude - ground_half_width_in_degrees
+            south = latitude - ground_half_height_in_degrees
+            east = longitude + ground_half_width_in_degrees
+            north = latitude + ground_half_height_in_degrees
+        else:
+            print("Not enough information given to determine rectangle to convert")
+            raise ValueError("Not enough information given to determine rectangle to convert")
     bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north],
                                                                     language=language,
                                                                     squash=squash,
                                                                     verbose=verbose)
     if verbose:
         show(streets, pavements, crossings)
-    print("output is", output)
+
     if output:
         drawable = shapely.affinity.rotate(
             shapely.affinity.scale(
@@ -577,7 +583,10 @@ def osm_to_tactile_main(
             # case '.dxf':
             #     write_dxf(output, bbox, drawable, scale=1000/scale, jigsaw=jigsaw)
             case '.svg':
-                write_svg(output, bbox, drawable, scale=1000/scale, jigsaw=jigsaw)
+                write_svg(output,
+                          [0, 0, width, height], # bbox,
+                          drawable,
+                          scale=1000/scale, jigsaw=jigsaw)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
