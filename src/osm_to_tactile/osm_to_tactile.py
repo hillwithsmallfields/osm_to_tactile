@@ -310,21 +310,14 @@ def cut_edges(width, height, jigsaw):
                else ("\n    L 0 0"))
             +'\n    z" fill="none" stroke="red" stroke_width="1"/>\n')
 
-def write_svg(output, bbox, streets, pavements, crossings, scale=1.0, jigsaw=""):
+def write_svg(output, bbox, drawable, scale=1.0, jigsaw=""):
     """Write the map as SVG."""
     left, bottom, right, top = bbox
     width = (right - left) * scale
     height = (top - bottom) * scale
-    islands = shapely.affinity.rotate(
-        shapely.affinity.scale(
-            prepare_map(streets, pavements, crossings),
-            xfact=scale, yfact=scale,
-            origin=(0.0, 0.0)),
-        angle=-90,
-    )
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        shapes = islands.svg()
+        shapes = drawable.svg()
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
@@ -571,11 +564,18 @@ def osm_to_tactile_main(
         show(streets, pavements, crossings)
     print("output is", output)
     if output:
+        drawable = shapely.affinity.rotate(
+            shapely.affinity.scale(
+                prepare_map(streets, pavements, crossings),
+                xfact=scale, yfact=scale,
+                origin=(0.0, 0.0)),
+            angle=-90,
+        )
         match os.path.splitext(output)[1]:
             # case '.dxf':
-            #     write_dxf(output, bbox, streets, pavements, crossings, scale=1000/scale, jigsaw=jigsaw)
+            #     write_dxf(output, bbox, drawable, scale=1000/scale, jigsaw=jigsaw)
             case '.svg':
-                write_svg(output, bbox, streets, pavements, crossings, scale=1000/scale, jigsaw=jigsaw)
+                write_svg(output, bbox, drawable, scale=1000/scale, jigsaw=jigsaw)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
