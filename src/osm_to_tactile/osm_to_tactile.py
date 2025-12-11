@@ -77,6 +77,11 @@ def get_args():
         "--height", "-H",
         type=float)
     parser.add_argument(
+        "--pieces", "-p",
+        nargs=2, type=int,
+        help="""The number of pieces to cut the map into.
+        Jigsaw edges are applied if --jigsaw is also given.""")
+    parser.add_argument(
         "--language", "-l",
         help="""The language to use for street names.
         This is in the format used by OSM, typically an ISO 639
@@ -306,11 +311,29 @@ def cut_edges(width, height, jigsaw):
                else ("\n    L 0 0"))
             +'\n    z" fill="none" stroke="green" stroke_width="1"/>\n')
 
-def write_svg(output, bbox, drawable, scale=1.0, jigsaw=""):
+def vertical_cut(x_position, height, down, jigsaw):
+    """Return the SVG for a vertical cut."""
+    return ('\n  <path d="M %f 0\n' % x_position
+            + '   L %f %f"\n' % (x_position, height)
+            + '   stroke="purple"/>\n')
+
+def horizontal_cut(y_position, width, across, jigsaw):
+    """Return the SVG for a horizontal cut."""
+    return ('\n  <path d="M 0 %f\n' % y_position
+            + '   L %f %f"\n' % (width, y_position)
+            + '   stroke="orange"/>\n')
+
+def cut_pieces(width, height, across, down, jigsaw):
+    """Return the SVG text for cutting out the shape of the tile."""
+    return ("\n".join([vertical_cut(i*width/across, height, down, jigsaw) for i in range(1, across)])
+            + "\n".join([horizontal_cut(i*height/down, width, across, jigsaw) for i in range(1, down)]))
+
+def write_svg(output, bbox, pieces, drawable, jigsaw=""):
     """Write the map as SVG."""
+    print("write_svg given bbox", bbox)
     left, bottom, right, top = bbox
-    width = (right - left) * scale
-    height = (top - bottom) * scale
+    width = right - left
+    height = top - bottom
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
         shapes = drawable.svg()
@@ -318,6 +341,8 @@ def write_svg(output, bbox, drawable, scale=1.0, jigsaw=""):
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
         outstream.write(cut_edges(width, height, jigsaw or ""))
+        if pieces:
+            outstream.write(cut_pieces(width, height, pieces[0], pieces[1], jigsaw))
         outstream.write("</svg>\n")
 
 # def write_dxf(output, bbox, streets, pavements, crossings):
@@ -535,6 +560,7 @@ def osm_to_tactile_main(
         centre=None,
         width=None, height=None, # output map size in millimetres
         scale=5000,
+        pieces=None,
         language=None,
         squash=1.0,
         jigsaw=None,
@@ -542,6 +568,7 @@ def osm_to_tactile_main(
         verbose=False):
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
     The rectangle can be specified as a bounding box or as a centre and width and height."""
+    print("starting conversion; width", width, "height", height)
     if not west and not south and not east and not north:
         if bbox:
             west, south, east, north = bbox
@@ -583,10 +610,12 @@ def osm_to_tactile_main(
             # case '.dxf':
             #     write_dxf(output, bbox, drawable, scale=1000/scale, jigsaw=jigsaw)
             case '.svg':
+                print("writing SVG; width", width, "height", height)
                 write_svg(output,
                           [0, 0, width, height], # bbox,
+                          pieces,
                           drawable,
-                          scale=1000/scale, jigsaw=jigsaw)
+                          jigsaw=jigsaw)
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
