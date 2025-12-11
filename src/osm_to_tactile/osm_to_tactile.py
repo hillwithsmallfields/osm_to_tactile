@@ -507,7 +507,7 @@ def prepare_map(streets, pavements=None, crossings=None):
                     for i, seg in enumerate(possible_label_segments):
                         seg_mid_x = (seg[0][0] + seg[1][0]) / 2
                         seg_mid_y = (seg[0][1] + seg[1][1]) / 2
-                        rotation = math.degrees(math.atan2(seg[1][1] - seg[0][1], seg[1][0] - seg[0][0]))
+                        rotation = (math.degrees(math.atan2(seg[1][1] - seg[0][1], seg[1][0] - seg[0][0])) + 180) % 180
                         if shapely.disjoint(map_shapes, transform_label_geometry(label_bbox,
                                                                                  seg_mid_x, seg_mid_y,
                                                                                  label_width, label_height,
@@ -567,7 +567,7 @@ def osm_to_tactile_main(
         drawable = shapely.affinity.rotate(
             shapely.affinity.scale(
                 prepare_map(streets, pavements, crossings),
-                xfact=scale, yfact=scale,
+                xfact=1000/scale, yfact=1000/scale,
                 origin=(0.0, 0.0)),
             angle=-90,
         )
