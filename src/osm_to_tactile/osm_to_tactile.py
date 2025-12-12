@@ -359,6 +359,11 @@ def show_list_value(label, lv):
     return lv
 
 def coords(transformer, clip_rect, geometry):
+    results = coords0(transformer, clip_rect, geometry)
+    print("coords", geometry, "-->", results, "clipped to", clip_rect)
+    return results
+
+def coords0(transformer, clip_rect, geometry):
     """Transform all the coordinates in a geometry, using a given transformer.
     This works whether the geometry has a single line or multiple lines.
     The result is clipped to be within the rectangle specified."""
@@ -419,6 +424,8 @@ def osm_fetch_streets_in_bbox(input_bbox,
     if verbose:
         print("fetching data in", input_bbox[0], input_bbox[1], input_bbox[2], input_bbox[3])
         print("southwest", OSM_DEBUG_FORMAT % (input_bbox[1], input_bbox[0], input_bbox[1], input_bbox[0]))
+        print("northwest", OSM_DEBUG_FORMAT % (input_bbox[3], input_bbox[0], input_bbox[3], input_bbox[0]))
+        print("southeast", OSM_DEBUG_FORMAT % (input_bbox[1], input_bbox[2], input_bbox[1], input_bbox[2]))
         print("northeast", OSM_DEBUG_FORMAT % (input_bbox[3], input_bbox[2], input_bbox[3], input_bbox[2]))
     overpass = Overpass()
     query = overpassQueryBuilder(bbox=[input_bbox[1], input_bbox[0], input_bbox[3], input_bbox[2]],
@@ -511,7 +518,7 @@ def transform_label_geometry(geometry, x, y, label_width, label_height, rotation
             rotation),
         xoff=x, yoff=y)
 
-def prepare_map(streets, pavements=None, crossings=None):
+def prepare_map(streets, pavements=None, crossings=None, label_streets=False):
     """Prepare the map for output."""
     merged_streets = {}
     for name, street_group in streets.items():
@@ -520,44 +527,45 @@ def prepare_map(streets, pavements=None, crossings=None):
     dotter = BrailleDotterUKAAF(dot_shape=Square,
                                 scale=1.25,
                                 dot_size=.5)
-    for name, street_group in merged_streets.items():
-        # don't label highly fragmented streets
-        if name != "<anon>" and len(street_group) <= 3:
-            for street in street_group:
-                # Make the label, and a bounding box for it (for faster clash comparisons):
-                label_text = street.shortened_name()
-                label_bbox = dotter.text_to_bbox(label_text)
-                label_width, label_height = dotter.text_dimensions(label_text)
-                label = dotter.text_to_dots(label_text)
-                possible_label_segments = street.longest_segments()
-                # Try placing the label bbox next to each of the
-                # straight-line segments, starting with the longest,
-                # and check whether it is free from clashes with
-                # anything already drawn (whether the base map, or
-                # previously added labels):
-                if possible_label_segments:
-                    taken = None
-                    for i, seg in enumerate(possible_label_segments):
-                        seg_mid_x = (seg[0][0] + seg[1][0]) / 2
-                        seg_mid_y = (seg[0][1] + seg[1][1]) / 2
-                        rotation = (math.degrees(math.atan2(seg[1][1] - seg[0][1], seg[1][0] - seg[0][0])) + 180) % 180
-                        if shapely.disjoint(map_shapes, transform_label_geometry(label_bbox,
-                                                                                 seg_mid_x, seg_mid_y,
-                                                                                 label_width, label_height,
-                                                                                 rotation)):
-                            map_shapes = shapely.union(map_shapes,
-                                                       transform_label_geometry(label,
-                                                                                seg_mid_x, seg_mid_y,
-                                                                                label_width, label_height,
-                                                                                rotation))
-                            taken = i
-                            break;
-                    if taken is None:
-                        print("Could not find a non-clashing label position for", name)
+    if label_streets:
+        for name, street_group in merged_streets.items():
+            # don't label highly fragmented streets
+            if name != "<anon>" and len(street_group) <= 3:
+                for street in street_group:
+                    # Make the label, and a bounding box for it (for faster clash comparisons):
+                    label_text = street.shortened_name()
+                    label_bbox = dotter.text_to_bbox(label_text)
+                    label_width, label_height = dotter.text_dimensions(label_text)
+                    label = dotter.text_to_dots(label_text)
+                    possible_label_segments = street.longest_segments()
+                    # Try placing the label bbox next to each of the
+                    # straight-line segments, starting with the longest,
+                    # and check whether it is free from clashes with
+                    # anything already drawn (whether the base map, or
+                    # previously added labels):
+                    if possible_label_segments:
+                        taken = None
+                        for i, seg in enumerate(possible_label_segments):
+                            seg_mid_x = (seg[0][0] + seg[1][0]) / 2
+                            seg_mid_y = (seg[0][1] + seg[1][1]) / 2
+                            rotation = (math.degrees(math.atan2(seg[1][1] - seg[0][1], seg[1][0] - seg[0][0])) + 180) % 180
+                            if shapely.disjoint(map_shapes, transform_label_geometry(label_bbox,
+                                                                                     seg_mid_x, seg_mid_y,
+                                                                                     label_width, label_height,
+                                                                                     rotation)):
+                                map_shapes = shapely.union(map_shapes,
+                                                           transform_label_geometry(label,
+                                                                                    seg_mid_x, seg_mid_y,
+                                                                                    label_width, label_height,
+                                                                                    rotation))
+                                taken = i
+                                break;
+                        if taken is None:
+                            print("Could not find a non-clashing label position for", name)
+                        else:
+                            print("Took label position choice", taken+1, "for", name)
                     else:
-                        print("Took label position choice", taken+1, "for", name)
-                else:
-                    print("No possible label placements for", name)
+                        print("No possible label placements for", name)
     return map_shapes
 
 APPROX_METRES_PER_DEGREE = 111320
@@ -604,7 +612,9 @@ def osm_to_tactile_main(
                                                                     language=language,
                                                                     squash=squash,
                                                                     verbose=verbose)
+
     if verbose:
+        print("output bbox generated as", bbox)
         show(streets, pavements, crossings)
 
     if output:
