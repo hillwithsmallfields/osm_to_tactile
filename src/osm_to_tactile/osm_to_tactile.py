@@ -19,12 +19,19 @@ OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
 LANE_WIDTH = 3
 
+# Some prefixes and suffixes that we remove from street names to make
+# the braille labels, in the hope of making it likelier to fit the
+# labels in.
+
 NAME_PREFIXES = {
     'ca': ["Carrer de ", "Avinguda de ", "Travessera de "],
     'es': ["Carrer de ", "Avinguda de ", "Travessera de ", "Calle "],
     'fr': ["Rue ", "Chaussée ", "Place ", "Avenue d'", "Avenue des", "Avenue du'", "Avenue "],
+    'hr': ["Put "],
+    'it': ["Borgo", "Viale ", "Via ", "Vicolo ", "Piazza "],
     'pl': ["Aleja ", "Plac "],
     'pt': ["Rua ", "Calçada da ", "Praça ", "Avenida "],
+    'ro': ["Strada ", "Bulevardul ", "Intrarea ", "Calea ", "Splaiul "],
     'sq': ["Rruga i ", "Rruga e ", "Rruga ", "Sheshi", "Shëshitorja ", "Bulevardi "],
     'uk': ["вулиця "],
 }
@@ -35,6 +42,7 @@ NAME_SUFFIXES = {
     'en': [" Road", " Street", " Square"],
     'eu': [" kalea"],
     'fi': ["katu"],
+    'hr': [" ulica"],
     'hu': [" utca", " tér"],
     'nl': ["straat", "plein", "laan", "steenweg", "steeg", "brug", "gracht"],
     'no': [" allé", " gate", "veien", "gata", "plass", "stredet"],
