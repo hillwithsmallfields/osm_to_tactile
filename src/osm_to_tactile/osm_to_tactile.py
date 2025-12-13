@@ -92,6 +92,8 @@ def get_args():
         language code, so for example --language nl will select the
         Dutch names which are given as name:nl in the map data.""")
     parser.add_argument(
+        "--projection", default="EPSG:3857")
+    parser.add_argument(
         "--scale", "-z",
         type=float, default=5000,
         help="""The scale of the map to produce, assuming the output is in millimeters.
@@ -407,7 +409,7 @@ def show(streets, pavements, crossings):
         print("    ", crossing)
 
 def osm_fetch_streets_in_bbox(input_bbox,
-                              projection="EPSG:3857",
+                              transformer,
                               language=None,
                               squash=1.0,
                               verbose=False):
@@ -435,7 +437,6 @@ def osm_fetch_streets_in_bbox(input_bbox,
                                  out='body')
     osm_data = overpass.query(query)
 
-    transformer = pyproj.Transformer.from_crs("EPSG:4326", projection)
     output_bbox = transformer.transform_bounds(input_bbox[0], input_bbox[1], input_bbox[2], input_bbox[3])
     print("output_bbox in projection coordinates:", output_bbox)
 
@@ -576,6 +577,7 @@ def osm_to_tactile_main(
         osmurl=None,
         centre=None,
         width=None, height=None, # output map size in millimetres
+        projection="EPSG:3857",
         scale=5000,
         pieces=None,
         language=None,
@@ -583,9 +585,14 @@ def osm_to_tactile_main(
         jigsaw=None,
         output=None,
         verbose=False):
+
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
     The rectangle can be specified as a bounding box or as a centre and width and height."""
+
+    transformer = pyproj.Transformer.from_crs("EPSG:4326", projection)
+
     print("starting conversion; width", width, "height", height)
+
     if not west and not south and not east and not north:
         if bbox:
             west, south, east, north = bbox
@@ -595,20 +602,28 @@ def osm_to_tactile_main(
                 latitude, longitude = [float(arg) for arg in osmurl.split("=")[1].split("/")[1:]]
             elif centre:
                 latitude, longitude = centre
-            ground_half_width_in_degrees = (((width / 2000 # map half width in metres
-                                           ) * scale)      # ground half width in metres
-                                            / APPROX_METRES_PER_DEGREE)
-            ground_half_height_in_degrees = (((height / 2000 # map half height in metres
-                                            ) * scale)       # ground half height in metres
-                                             / APPROX_METRES_PER_DEGREE)
-            west = longitude - ground_half_width_in_degrees
-            south = latitude - ground_half_height_in_degrees
-            east = longitude + ground_half_width_in_degrees
-            north = latitude + ground_half_height_in_degrees
+
+            # we have latitude and longitude, but we want to calculate
+            # the bounding box in web mercator, which is in metres
+            centre_x, centre_y = transformer.transform(longitude, latitude)
+
+            # the 1000 is because our coordinates are in metres, but
+            # the output map size is given in millimetres
+            half_map_width_on_ground = width * scale / 2000
+            half_map_height_on_ground = height * scale / 2000
+
+            left = centre_x - half_map_width_on_ground
+            bottom = centre_y - half_map_height_on_ground
+            right = centre_x + half_map_width_on_ground
+            top = centre_y + half_map_height_on_ground
+
+            west, south = transformer.transform(left, bottom, direction=pyproj.enums.TransformDirection.INVERSE)
+            east, north = transformer.transform(right, top, direction=pyproj.enums.TransformDirection.INVERSE)
         else:
             print("Not enough information given to determine rectangle to convert")
             raise ValueError("Not enough information given to determine rectangle to convert")
     bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north],
+                                                                    transformer=transformer,
                                                                     language=language,
                                                                     squash=squash,
                                                                     verbose=verbose)
