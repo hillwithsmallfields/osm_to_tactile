@@ -116,6 +116,11 @@ def get_args():
         action='store_true',
         help="""Draw a 100m grid over the map.""")
     parser.add_argument(
+        "--snap-to-grid",
+        action='store_true',
+        help="""Snap the bottom left corner of the map to the nearest
+        100m grid point in web mercator coordinates.""")
+    parser.add_argument(
         "--output", "-o",
         help="""The name of the output file.
         The output format is deduced from the extension; currently only .svg is supported.""")
@@ -592,6 +597,7 @@ def osm_to_tactile_main(
         squash=1.0,
         jigsaw=None,
         grid=False,
+        snap_to_grid=False,
         label_streets=False,
         output=None,
         verbose=False):
@@ -630,10 +636,6 @@ def osm_to_tactile_main(
             right = centre_x + map_width_on_ground/2
             top = centre_y + map_height_on_ground/2
 
-            # we want these back into longitude and latitude for the OSM API to fetch
-            west, south = transformer.transform(left, bottom, direction=pyproj.enums.TransformDirection.INVERSE)
-            east, north = transformer.transform(right, top, direction=pyproj.enums.TransformDirection.INVERSE)
-
             # in web mercator metres:
             left_most_100m_grid_line = ((left//100)+1)*100
             bottom_most_100m_grid_line = ((bottom//100)+1)*100
@@ -641,6 +643,18 @@ def osm_to_tactile_main(
             # get them in metres relative to the corner of the map
             left_grid = (left_most_100m_grid_line - left) * 1000 / scale
             bottom_grid = (bottom_most_100m_grid_line - bottom) * 1000 / scale
+
+            if snap_to_grid:
+                left -= left_grid
+                bottom -= bottom_grid
+                right -= left_grid
+                top -= bottom_grid
+                left_grid = 0
+                bottom_grid = 0
+
+            # we want these back into longitude and latitude for the OSM API to fetch
+            west, south = transformer.transform(left, bottom, direction=pyproj.enums.TransformDirection.INVERSE)
+            east, north = transformer.transform(right, top, direction=pyproj.enums.TransformDirection.INVERSE)
 
             if verbose:
                 print("centre (longitude, latitude):", longitude, latitude)
