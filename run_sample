@@ -4,10 +4,10 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 source $SCRIPT_DIR/env/bin/activate
 
-SCALE=5000
-SCALE=1250
 SCALE=2500
 SCALE=750
+SCALE=1250
+SCALE=5000
 
 SVGFILE=etterbeek-$SCALE.svg
 
@@ -18,7 +18,9 @@ $SCRIPT_DIR/src/osm_to_tactile/osm_to_tactile.py \
     --output $SVGFILE \
     --language nl \
     --scale $SCALE \
-    --verbose \
+    --grid \
+    --snap-to-grid \
+    --jigsaw=all \
     --squash 1
 
 inkscape $SVGFILE

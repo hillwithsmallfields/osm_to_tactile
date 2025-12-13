@@ -14,6 +14,7 @@ from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 # import ezdxf
 
 from braille_to_geometry.braille_to_geometry import BrailleDotterUKAAF, Diamond, Square, Octagon
+import nubs
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
@@ -337,6 +338,18 @@ def cut_edges(width, height, jigsaw):
                else ("\n    L 0 0"))
             +'\n    z" fill="none" stroke="green" stroke_width="1"/>\n')
 
+def vertical_cut_section(number, section_length, x_position, jigsaw=False):
+    """Return the vertical cut section for one square."""
+    print("vertical_cut_section", number, section_length, x_position)
+    return (nubs.vertical_with_two_nubs(
+        x0=x_position, y0=number*section_length,
+        height=section_length,
+        first_nub_depth=10, first_nub_breadth=10,
+        second_nub_depth=-10, second_nub_breadth=10,
+        first_midpoint=20, spacing=60)
+            if jigsaw
+            else ('   L %f %f\n' % (x_position, number*section_length)))
+
 def vertical_cut(x_position, height, down, jigsaw, colour):
     """Return the SVG for a vertical cut.
 
@@ -344,8 +357,22 @@ def vertical_cut(x_position, height, down, jigsaw, colour):
     print("making a vertical cut in", colour, "with", down, "sections")
     section = height/down
     return ('\n  <path d="M %f 0\n' % x_position
-            + " ".join(('   L %f %f\n' % (x_position, i*section)) for i in range(down+1))
-            + '"   stroke="%s"/>\n' % colour)
+            + " ".join(vertical_cut_section(i, section, x_position, jigsaw=jigsaw)
+                       for i in range(down+1))
+            + '" fill="none"  stroke="%s"/>\n' % colour)
+
+def horizontal_cut_section(number, section_length, y_position, jigsaw=False):
+    """Return the horizontal cut section for one square."""
+    print("horizontal_cut_section", number, section_length, y_position)
+    return (nubs.horizontal_with_two_nubs(
+        x0=number*section_length, y0=y_position,
+        width=section_length,
+        first_nub_depth=10, first_nub_breadth=10,
+        second_nub_depth=10, second_nub_breadth=10,
+        first_midpoint=20, spacing=60
+    )
+            if jigsaw
+            else ('   L %f %f\n' % (number*section_length, y_position)))
 
 def horizontal_cut(y_position, width, across, jigsaw, colour):
     """Return the SVG for a horizontal cut.
@@ -354,8 +381,9 @@ def horizontal_cut(y_position, width, across, jigsaw, colour):
     print("making a horizontal cut in", colour, "with", across, "sections")
     section = width/across
     return ('\n  <path d="M 0 %f\n' % y_position
-            + " ".join(('   L %f %f\n' % (i*section, y_position)) for i in range(across+1))
-            + '"   stroke="%s"/>\n' % colour)
+            + " ".join(horizontal_cut_section(i, section, y_position, jigsaw=jigsaw)
+                       for i in range(across+1))
+            + '"  fill="none"  stroke="%s"/>\n' % colour)
 
 def cut_pieces(width, height,
                across, down,
@@ -399,7 +427,7 @@ def write_svg(output, bbox, pieces, drawable, grid=None, jigsaw=""):
         if pieces:
             outstream.write(cut_pieces(width, height, pieces[0], pieces[1], jigsaw))
         if grid:
-            outstream.write(grid_100m(grid[0], grid[1], width, height))
+            outstream.write(grid_100m(grid[0], grid[1], width, height, jigsaw=jigsaw))
         outstream.write("</svg>\n")
 
 # def write_dxf(output, bbox, streets, pavements, crossings):
@@ -609,8 +637,6 @@ def prepare_map(streets, pavements=None, crossings=None, label_streets=False):
                     else:
                         print("No possible label placements for", name)
     return map_shapes
-
-APPROX_METRES_PER_DEGREE = 111320
 
 def osm_to_tactile_main(
         bbox=None,
