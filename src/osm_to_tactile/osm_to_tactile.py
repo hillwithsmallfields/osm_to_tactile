@@ -338,19 +338,37 @@ def cut_edges(width, height, jigsaw):
             +'\n    z" fill="none" stroke="green" stroke_width="1"/>\n')
 
 def vertical_cut(x_position, height, down, jigsaw, colour):
-    """Return the SVG for a vertical cut."""
+    """Return the SVG for a vertical cut.
+
+    `down` is how many horizontal rows the map is being cut into."""
+    print("making a vertical cut in", colour, "with", down, "sections")
+    section = height/down
     return ('\n  <path d="M %f 0\n' % x_position
-            + '   L %f %f"\n' % (x_position, height)
-            + '   stroke="%s"/>\n' % colour)
+            + " ".join(('   L %f %f\n' % (x_position, i*section)) for i in range(down+1))
+            + '"   stroke="%s"/>\n' % colour)
 
 def horizontal_cut(y_position, width, across, jigsaw, colour):
-    """Return the SVG for a horizontal cut."""
-    return ('\n  <path d="M 0 %f\n' % y_position
-            + '   L %f %f"\n' % (width, y_position)
-            + '   stroke="%s"/>\n' % colour)
+    """Return the SVG for a horizontal cut.
 
-def cut_pieces(width, height, across, down, jigsaw, colour="purple"):
-    """Return the SVG text for cutting out the shape of the tile."""
+    `across` is how many vertical columns the map is being cut into."""
+    print("making a horizontal cut in", colour, "with", across, "sections")
+    section = width/across
+    return ('\n  <path d="M 0 %f\n' % y_position
+            + " ".join(('   L %f %f\n' % (i*section, y_position)) for i in range(across+1))
+            + '"   stroke="%s"/>\n' % colour)
+
+def cut_pieces(width, height,
+               across, down,
+               jigsaw,
+               colour="purple"):
+    """Return the SVG text for cutting out the shape of the tile.
+
+    The arguments `width` and `height` refer to the overall width and
+    height of the map (in output units, typically millimetres).
+
+    `across` and `down` are how many pieces the map is to be cut into
+    in each direction.
+    """
     return ("\n  ".join([vertical_cut(i*width/across, height, down,
                                       jigsaw, colour)
                        for i in range(1, across)])
@@ -358,10 +376,12 @@ def cut_pieces(width, height, across, down, jigsaw, colour="purple"):
                                           jigsaw, colour)
                          for i in range(1, down)]))
 
-def grid_100m(x0, y0, width, height):
-    return ("\n  ".join(vertical_cut(x0+col*100, height, 0, 0, "orange")
+def grid_100m(x0, y0, width, height, jigsaw=False):
+    return ("\n  ".join(vertical_cut(x0+col*100, height, int(height/100),
+                                     jigsaw, "orange")
                       for col in range(0, int(width/100)))
-            + "\n  ".join(horizontal_cut(y0+row*100, width, 0, 0, "orange")
+            + "\n  ".join(horizontal_cut(y0+row*100, width, int(width/100),
+                                         jigsaw, "orange")
                           for row in range(0, int(height/100))))
 
 def write_svg(output, bbox, pieces, drawable, grid=None, jigsaw=""):
