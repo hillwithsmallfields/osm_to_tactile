@@ -104,9 +104,17 @@ def get_args():
         help="""How much to squash roads so they don't take up too
         much space on the map.""")
     parser.add_argument(
+        "--label-streets",
+        action='store_true',
+        help="""Write braille labels alongside streets where there is enough room.""")
+    parser.add_argument(
         "--jigsaw", "-j",
         help="""Make interlocking patterns along the edges.
         Not yet implemented.""")
+    parser.add_argument(
+        "--grid",
+        action='store_true',
+        help="""Draw a 100m grid over the map.""")
     parser.add_argument(
         "--output", "-o",
         help="""The name of the output file.
@@ -148,7 +156,6 @@ class LinearWay:
             new_coords = my_coords + list(reversed(their_coords[:-1]))
         else:
             raise ValueError("No common endpoints")
-        # print("new_coords", new_coords)
         self.geometry = shapely.LineString(new_coords)
         for k, v in other.attributes.items():
             if k in self.attributes:
@@ -317,26 +324,35 @@ def cut_edges(width, height, jigsaw):
                else ("\n    L 0 0"))
             +'\n    z" fill="none" stroke="green" stroke_width="1"/>\n')
 
-def vertical_cut(x_position, height, down, jigsaw):
+def vertical_cut(x_position, height, down, jigsaw, colour):
     """Return the SVG for a vertical cut."""
     return ('\n  <path d="M %f 0\n' % x_position
             + '   L %f %f"\n' % (x_position, height)
-            + '   stroke="purple"/>\n')
+            + '   stroke="%s"/>\n' % colour)
 
-def horizontal_cut(y_position, width, across, jigsaw):
+def horizontal_cut(y_position, width, across, jigsaw, colour):
     """Return the SVG for a horizontal cut."""
     return ('\n  <path d="M 0 %f\n' % y_position
             + '   L %f %f"\n' % (width, y_position)
-            + '   stroke="orange"/>\n')
+            + '   stroke="%s"/>\n' % colour)
 
-def cut_pieces(width, height, across, down, jigsaw):
+def cut_pieces(width, height, across, down, jigsaw, colour="purple"):
     """Return the SVG text for cutting out the shape of the tile."""
-    return ("\n".join([vertical_cut(i*width/across, height, down, jigsaw) for i in range(1, across)])
-            + "\n".join([horizontal_cut(i*height/down, width, across, jigsaw) for i in range(1, down)]))
+    return ("\n  ".join([vertical_cut(i*width/across, height, down,
+                                      jigsaw, colour)
+                       for i in range(1, across)])
+            + "\n  ".join([horizontal_cut(i*height/down, width, across,
+                                          jigsaw, colour)
+                         for i in range(1, down)]))
 
-def write_svg(output, bbox, pieces, drawable, jigsaw=""):
+def grid_100m(x0, y0, width, height):
+    return ("\n  ".join(vertical_cut(x0+col*100, height, 0, 0, "orange")
+                      for col in range(0, int(width/100)))
+            + "\n  ".join(horizontal_cut(y0+row*100, width, 0, 0, "orange")
+                          for row in range(0, int(height/100))))
+
+def write_svg(output, bbox, pieces, drawable, grid=None, jigsaw=""):
     """Write the map as SVG."""
-    print("write_svg given bbox", bbox)
     left, bottom, right, top = bbox
     width = right - left
     height = top - bottom
@@ -349,23 +365,15 @@ def write_svg(output, bbox, pieces, drawable, jigsaw=""):
         outstream.write(cut_edges(width, height, jigsaw or ""))
         if pieces:
             outstream.write(cut_pieces(width, height, pieces[0], pieces[1], jigsaw))
+        if grid:
+            outstream.write(grid_100m(grid[0], grid[1], width, height))
         outstream.write("</svg>\n")
 
 # def write_dxf(output, bbox, streets, pavements, crossings):
 #     """Write the map as DXF."""
 #     pass
 
-def show_list_value(label, lv):
-    lv = list(lv)
-    print(label, lv)
-    return lv
-
 def coords(transformer, clip_rect, geometry):
-    results = coords0(transformer, clip_rect, geometry)
-    print("coords", geometry, "-->", results, "clipped to", clip_rect)
-    return results
-
-def coords0(transformer, clip_rect, geometry):
     """Transform all the coordinates in a geometry, using a given transformer.
     This works whether the geometry has a single line or multiple lines.
     The result is clipped to be within the rectangle specified."""
@@ -583,6 +591,8 @@ def osm_to_tactile_main(
         language=None,
         squash=1.0,
         jigsaw=None,
+        grid=False,
+        label_streets=False,
         output=None,
         verbose=False):
 
@@ -607,18 +617,39 @@ def osm_to_tactile_main(
             # the bounding box in web mercator, which is in metres
             centre_x, centre_y = transformer.transform(longitude, latitude)
 
-            # the 1000 is because our coordinates are in metres, but
-            # the output map size is given in millimetres
-            half_map_width_on_ground = width * scale / 2000
-            half_map_height_on_ground = height * scale / 2000
+            # The 1000 is because our coordinates are in metres, but
+            # the output map size is given in millimetres.  And the
+            # width and height are swapped, because I got coordinates
+            # swapped somewhere else and haven't found time to find
+            # where, hence the rotation of the map by 90 degrees.
+            map_height_on_ground = width * scale / 1000
+            map_width_on_ground = height * scale / 1000
 
-            left = centre_x - half_map_width_on_ground
-            bottom = centre_y - half_map_height_on_ground
-            right = centre_x + half_map_width_on_ground
-            top = centre_y + half_map_height_on_ground
+            left = centre_x - map_width_on_ground/2
+            bottom = centre_y - map_height_on_ground/2
+            right = centre_x + map_width_on_ground/2
+            top = centre_y + map_height_on_ground/2
 
+            # we want these back into longitude and latitude for the OSM API to fetch
             west, south = transformer.transform(left, bottom, direction=pyproj.enums.TransformDirection.INVERSE)
             east, north = transformer.transform(right, top, direction=pyproj.enums.TransformDirection.INVERSE)
+
+            # in web mercator metres:
+            left_most_100m_grid_line = ((left//100)+1)*100
+            bottom_most_100m_grid_line = ((bottom//100)+1)*100
+
+            # get them in metres relative to the corner of the map
+            left_grid = (left_most_100m_grid_line - left) * 1000 / scale
+            bottom_grid = (bottom_most_100m_grid_line - bottom) * 1000 / scale
+
+            if verbose:
+                print("centre (longitude, latitude):", longitude, latitude)
+                print("centre (webmercator x, y):", centre_x, centre_y)
+                print("resulting map in mm (w, h):", width, height)
+                print("map size on ground (w, h):", map_width_on_ground, map_height_on_ground)
+                print("webmercator bbox (lbrt):", left, bottom, right, top)
+                print("longlat bounding box (wsen):", west, south, east, north)
+
         else:
             print("Not enough information given to determine rectangle to convert")
             raise ValueError("Not enough information given to determine rectangle to convert")
@@ -633,12 +664,18 @@ def osm_to_tactile_main(
         show(streets, pavements, crossings)
 
     if output:
-        drawable = shapely.affinity.rotate(
-            shapely.affinity.scale(
-                prepare_map(streets, pavements, crossings),
-                xfact=1000/scale, yfact=1000/scale,
-                origin=(0.0, 0.0)),
-            angle=-90,
+        drawable = shapely.affinity.translate(
+            shapely.affinity.rotate(
+                shapely.affinity.scale(
+                    prepare_map(streets, pavements, crossings,
+                                label_streets=label_streets),
+                    xfact=1000/scale, yfact=1000/scale,
+                    origin=(0.0, 0.0)),
+                angle=-90,
+                origin=(0, 0),
+            ),
+            xoff=0,
+            yoff=height
         )
         match os.path.splitext(output)[1]:
             # case '.dxf':
@@ -649,6 +686,7 @@ def osm_to_tactile_main(
                           [0, 0, width, height], # bbox,
                           pieces,
                           drawable,
+                          grid=(left_grid, bottom_grid) if grid else None,
                           jigsaw=jigsaw)
 
 if __name__ == "__main__":
