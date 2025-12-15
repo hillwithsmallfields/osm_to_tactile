@@ -321,6 +321,14 @@ class Crossing(LinearWay):
         return {'type': 'crossing',
                 'geometry': self.coords()}
 
+class Bridge:
+
+    """A bridge carrying a street (or possibly some other kind of way)."""
+
+    def __init__(self, carrying):
+        self.carrying = carrying
+        self.geometry = shapely.buffer(carrying.geometry, carrying.width*2, cap_style=shapely.BufferCapStyle.flat)
+
 def jigsaw_edge(jigsaw_spec, edge):
     return ((jigsaw_spec == "all")
             or (edge in jigsaw_spec))
@@ -514,36 +522,56 @@ def osm_fetch_streets_in_bbox(input_bbox,
     streets = defaultdict(list)
     pavements = []
     crossings = []
+    bridges = []
     for way in ways:
         tags = way.tags()
         geometry = way.geometry()
+        if tags.get('bridge'):
+            print("Found bridge carrying", tags.get('highway'), tags.get('name', "anon"))
         if geometry['type'] != 'LineString':
             print("Skipping a non-LineString highway", tags.get('name', "anon"), geometry['type'])
             continue
-        if tags.get('highway') == 'footway':
-            match tags.get('footway'):
-                case 'sidewalk':
-                    pavements.append(Pavement(coords(transformer, output_bbox, geometry), squash=squash))
-                case 'crossing':
-                    crossings.append(Crossing(coords(transformer, output_bbox, geometry), squash=squash))
-        else:
-            if not tags.get('tunnel'):
+        if not tags.get('tunnel'):
+            if tags.get('highway') == 'footway':
+                match tags.get('footway'):
+                    case 'sidewalk':
+                        pavement = Pavement(coords(transformer, output_bbox, geometry), squash=squash)
+                        if tags.get('bridge'):
+                            bridges.append(Bridge(pavement))
+                        else:
+                            pavements.append(pavement)
+                    case 'crossing':
+                        crossing = Crossing(coords(transformer, output_bbox, geometry), squash=squash)
+                        if tags.get('bridge'):
+                            bridges.append(Bridge(crossing))
+                        else:
+                            crossings.append(crossing)
+            else:
                 street = Street(attributes=tags,
                                 geometry=coords(transformer, output_bbox, geometry),
                                 language=language,
                                 squash=squash)
-                streets[street.name].append(street)
-    return output_bbox, streets, pavements, crossings
+                if tags.get('bridge'):
+                    bridges.append(Bridge(street))
+                else:
+                    streets[street.name].append(street)
+    return output_bbox, streets, pavements, crossings, bridges
 
-def convert_to_islands(streets, pavements=None, crossings=None):
+def convert_to_islands(streets, pavements=None, crossings=None, bridges=None):
     """Convert the solid ways to a probably contiguous area, with islands in it,
     where each island is the area between streets (or between a street and its pavements).
     If used for cutting, this will result in a cut sheet which can be stuck to a baseboard."""
-    return shapely.union_all([s.solid()
+    islands = shapely.union_all([s.solid()
                               for sg in streets.values()
                               for s in sg]
-                             + [p.solid() for p in pavements] if pavements else []
-                             + [c.solid() for c in crossings] if pavements else [])
+                                + [p.solid() for p in pavements] if pavements else []
+                                + [c.solid() for c in crossings] if pavements else [])
+    if bridges:
+        for bridge in bridges:
+            islands = shapely.difference(islands, bridge.geometry)
+        for bridge in bridges:
+            islands = shapely.union(islands, bridge.carrying.geometry)
+    return islands
 
 def combine_street_segments(street_group):
     """Return a list of streets which have been merged as far as possible.
@@ -590,12 +618,12 @@ def transform_label_geometry(geometry, x, y, label_width, label_height, rotation
             rotation),
         xoff=x, yoff=y)
 
-def prepare_map(streets, pavements=None, crossings=None, label_streets=False):
+def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_streets=False):
     """Prepare the map for output."""
     merged_streets = {}
     for name, street_group in streets.items():
         merged_streets[name] = combine_street_segments(street_group)
-    map_shapes = convert_to_islands(merged_streets, pavements, crossings)
+    map_shapes = convert_to_islands(merged_streets, pavements, crossings, bridges)
     dotter = BrailleDotterUKAAF(dot_shape=Square,
                                 scale=1.25,
                                 dot_size=.5)
@@ -728,11 +756,12 @@ def osm_to_tactile_main(
         else:
             print("Not enough information given to determine rectangle to convert")
             raise ValueError("Not enough information given to determine rectangle to convert")
-    bbox, streets, pavements, crossings = osm_fetch_streets_in_bbox([west, south, east, north],
-                                                                    transformer=transformer,
-                                                                    language=language,
-                                                                    squash=squash,
-                                                                    verbose=verbose)
+    bbox, streets, pavements, crossings, bridges = osm_fetch_streets_in_bbox(
+        [west, south, east, north],
+        transformer=transformer,
+        language=language,
+        squash=squash,
+        verbose=verbose)
 
     if verbose:
         print("output bbox generated as", bbox)
@@ -743,7 +772,10 @@ def osm_to_tactile_main(
         drawable = shapely.affinity.translate(
             shapely.affinity.rotate(
                 shapely.affinity.scale(
-                    prepare_map(streets, pavements, crossings,
+                    prepare_map(streets,
+                                pavements=pavements,
+                                crossings=crossings,
+                                bridges=bridges,
                                 label_streets=label_streets),
                     xfact=1000/(scale*y_correction), yfact=1000/scale,
                     origin=(0.0, 0.0)),
