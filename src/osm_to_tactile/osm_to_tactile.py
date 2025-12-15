@@ -686,7 +686,7 @@ def osm_to_tactile_main(
             # swapped somewhere else and haven't found time to find
             # where, hence the rotation of the map by 90 degrees.
             map_height_on_ground = width * scale / 1000
-            map_width_on_ground = height * scale / 1000
+            map_width_on_ground = y_correction * height * scale / 1000
 
             left = centre_x - map_width_on_ground/2
             bottom = centre_y - map_height_on_ground/2
