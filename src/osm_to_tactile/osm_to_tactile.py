@@ -90,6 +90,12 @@ def get_args():
         help="""The heigth of the resulting map, nominally in millimetres.
         The actual size depends on downstream software and hardware.""")
     parser.add_argument(
+        "--y-correction",
+        type=float, default=1.0,
+        help="""A multiplier for the Y coordinates, for if the map looks
+        distorted.  I think is something do with the projection, rather
+        than working round a bug in the code.""")
+    parser.add_argument(
         "--pieces", "-p",
         nargs=2, type=int,
         help="""The number of pieces to cut the map into.
@@ -642,6 +648,7 @@ def osm_to_tactile_main(
         width=None, height=None, # output map size in millimetres
         projection="EPSG:3857",
         scale=5000,
+        y_correction=1.0,
         pieces=None,
         language=None,
         squash=1.0,
@@ -738,7 +745,7 @@ def osm_to_tactile_main(
                 shapely.affinity.scale(
                     prepare_map(streets, pavements, crossings,
                                 label_streets=label_streets),
-                    xfact=1000/scale, yfact=1000/scale,
+                    xfact=1000/(scale*y_correction), yfact=1000/scale,
                     origin=(0.0, 0.0)),
                 angle=-90,
                 origin=(0, 0),
