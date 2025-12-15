@@ -421,14 +421,16 @@ def grid_100m(x0, y0, width, height, jigsaw=False, colour="orange"):
                                          jigsaw, colour)
                           for row in range(0, int(height/100))))
 
-def write_svg(output, bbox, pieces, drawable, grid=None, jigsaw="", stroke="black", fill="black"):
+def write_svg(output, bbox, pieces,
+              drawable_map, drawable_labels,
+              grid=None, jigsaw="", stroke="black", fill="black"):
     """Write the map as SVG."""
     left, bottom, right, top = bbox
     width = right - left
     height = top - bottom
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        shapes = drawable.svg(fill_color=fill)
+        shapes = drawable_map.svg(fill_color=fill) + drawable_labels.svg(fill_color='blue')
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
@@ -561,8 +563,8 @@ def convert_to_islands(streets, pavements=None, crossings=None, bridges=None):
     where each island is the area between streets (or between a street and its pavements).
     If used for cutting, this will result in a cut sheet which can be stuck to a baseboard."""
     islands = shapely.union_all([s.solid()
-                              for sg in streets.values()
-                              for s in sg]
+                                 for sg in streets.values()
+                                 for s in sg]
                                 + [p.solid() for p in pavements] if pavements else []
                                 + [c.solid() for c in crossings] if pavements else [])
     if bridges:
@@ -623,6 +625,7 @@ def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_str
     for name, street_group in streets.items():
         merged_streets[name] = combine_street_segments(street_group)
     map_shapes = convert_to_islands(merged_streets, pavements, crossings, bridges)
+    labels = []
     dotter = BrailleDotterUKAAF(dot_shape=None,
                                 scale=1.25,
                                 dot_size=.25)
@@ -652,11 +655,12 @@ def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_str
                                                                                      seg_mid_x, seg_mid_y,
                                                                                      label_width, label_height,
                                                                                      rotation)):
-                                map_shapes = shapely.union(map_shapes,
-                                                           transform_label_geometry(label,
-                                                                                    seg_mid_x, seg_mid_y,
-                                                                                    label_width, label_height,
-                                                                                    rotation))
+                                label = transform_label_geometry(label,
+                                                                 seg_mid_x, seg_mid_y,
+                                                                 label_width, label_height,
+                                                                 rotation)
+                                map_shapes = shapely.union(map_shapes, label)
+                                labels.append(label)
                                 taken = i
                                 break;
                         if taken is None:
@@ -665,7 +669,21 @@ def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_str
                             print("Took label position choice", taken+1, "for", name)
                     else:
                         print("No possible label placements for", name)
-    return map_shapes
+    return map_shapes, shapely.union_all(labels)
+
+def scale_rotate_translate(features, scale, y_correction, height):
+    return shapely.affinity.translate(
+            shapely.affinity.rotate(
+                shapely.affinity.scale(
+                    features,
+                    xfact=1000/(scale*y_correction), yfact=1000/scale,
+                    origin=(0.0, 0.0)),
+                angle=-90,
+                origin=(0, 0),
+            ),
+            xoff=0,
+            yoff=height
+        )
 
 def osm_to_tactile_main(
         bbox=None,
@@ -768,31 +786,23 @@ def osm_to_tactile_main(
 
     if output:
         print("scale is", scale, "so scale factor is", 1000/scale)
-        drawable = shapely.affinity.translate(
-            shapely.affinity.rotate(
-                shapely.affinity.scale(
-                    prepare_map(streets,
-                                pavements=pavements,
-                                crossings=crossings,
-                                bridges=bridges,
-                                label_streets=label_streets),
-                    xfact=1000/(scale*y_correction), yfact=1000/scale,
-                    origin=(0.0, 0.0)),
-                angle=-90,
-                origin=(0, 0),
-            ),
-            xoff=0,
-            yoff=height
-        )
+        map_shapes, label_shapes = prepare_map(streets,
+                                               pavements=pavements,
+                                               crossings=crossings,
+                                               bridges=bridges,
+                                               label_streets=label_streets)
+        drawable_map = scale_rotate_translate(map_shapes, scale, y_correction, height)
+        drawable_labels = scale_rotate_translate(label_shapes, scale, y_correction, height)
         match os.path.splitext(output)[1]:
             # case '.dxf':
-            #     write_dxf(output, bbox, drawable, scale=1000/scale, jigsaw=jigsaw)
+            #     write_dxf(output, bbox, drawable_map, scale=1000/scale, jigsaw=jigsaw)
             case '.svg':
                 print("writing SVG; width", width, "height", height)
                 write_svg(output,
                           [0, 0, width, height], # bbox,
                           pieces,
-                          drawable,
+                          drawable_map,
+                          drawable_labels,
                           grid=(left_grid, bottom_grid) if grid else None,
                           jigsaw=jigsaw)
 
