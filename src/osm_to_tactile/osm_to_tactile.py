@@ -397,7 +397,7 @@ def horizontal_cut(y_position, width, across, jigsaw, colour):
 def cut_pieces(width, height,
                across, down,
                jigsaw,
-               colour="purple"):
+               colour="red"):
     """Return the SVG text for cutting out the shape of the tile.
 
     The arguments `width` and `height` refer to the overall width and
@@ -413,22 +413,22 @@ def cut_pieces(width, height,
                                           jigsaw, colour)
                          for i in range(1, down)]))
 
-def grid_100m(x0, y0, width, height, jigsaw=False):
+def grid_100m(x0, y0, width, height, jigsaw=False, colour="orange"):
     return ("\n  ".join(vertical_cut(x0+col*100, height, int(height/100),
-                                     jigsaw, "orange")
+                                     jigsaw, colour)
                       for col in range(0, int(width/100)))
             + "\n  ".join(horizontal_cut(y0+row*100, width, int(width/100),
-                                         jigsaw, "orange")
+                                         jigsaw, colour)
                           for row in range(0, int(height/100))))
 
-def write_svg(output, bbox, pieces, drawable, grid=None, jigsaw=""):
+def write_svg(output, bbox, pieces, drawable, grid=None, jigsaw="", stroke="black", fill="black"):
     """Write the map as SVG."""
     left, bottom, right, top = bbox
     width = right - left
     height = top - bottom
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        shapes = drawable.svg()
+        shapes = drawable.svg(fill_color=fill)
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
