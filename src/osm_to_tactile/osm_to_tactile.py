@@ -526,35 +526,34 @@ def osm_fetch_streets_in_bbox(input_bbox,
     for way in ways:
         tags = way.tags()
         geometry = way.geometry()
-        if tags.get('bridge'):
-            print("Found bridge carrying", tags.get('highway'), tags.get('name', "anon"))
         if geometry['type'] != 'LineString':
-            print("Skipping a non-LineString highway", tags.get('name', "anon"), geometry['type'])
+            print("Skipping a non-LineString highway", tags.get('name', "anon"), tags.get('highway'), geometry['type'])
             continue
         if not tags.get('tunnel'):
-            if tags.get('highway') == 'footway':
-                match tags.get('footway'):
-                    case 'sidewalk':
-                        pavement = Pavement(coords(transformer, output_bbox, geometry), squash=squash)
-                        if tags.get('bridge'):
-                            bridges.append(Bridge(pavement))
-                        else:
-                            pavements.append(pavement)
-                    case 'crossing':
-                        crossing = Crossing(coords(transformer, output_bbox, geometry), squash=squash)
-                        if tags.get('bridge'):
-                            bridges.append(Bridge(crossing))
-                        else:
-                            crossings.append(crossing)
-            else:
-                street = Street(attributes=tags,
-                                geometry=coords(transformer, output_bbox, geometry),
-                                language=language,
-                                squash=squash)
-                if tags.get('bridge'):
-                    bridges.append(Bridge(street))
-                else:
-                    streets[street.name].append(street)
+            match tags.get('highway'):
+                case 'footway':
+                    match tags.get('footway'):
+                        case 'sidewalk' | 'steps' | 'pedestrian':
+                            pavement = Pavement(coords(transformer, output_bbox, geometry), squash=squash)
+                            if tags.get('bridge'):
+                                bridges.append(Bridge(pavement))
+                            else:
+                                pavements.append(pavement)
+                        case 'crossing':
+                            crossing = Crossing(coords(transformer, output_bbox, geometry), squash=squash)
+                            if tags.get('bridge'):
+                                bridges.append(Bridge(crossing))
+                            else:
+                                crossings.append(crossing)
+                case _:
+                    street = Street(attributes=tags,
+                                    geometry=coords(transformer, output_bbox, geometry),
+                                    language=language,
+                                    squash=squash)
+                    if tags.get('bridge'):
+                        bridges.append(Bridge(street))
+                    else:
+                        streets[street.name].append(street)
     return output_bbox, streets, pavements, crossings, bridges
 
 def convert_to_islands(streets, pavements=None, crossings=None, bridges=None):
@@ -624,9 +623,9 @@ def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_str
     for name, street_group in streets.items():
         merged_streets[name] = combine_street_segments(street_group)
     map_shapes = convert_to_islands(merged_streets, pavements, crossings, bridges)
-    dotter = BrailleDotterUKAAF(dot_shape=Square,
+    dotter = BrailleDotterUKAAF(dot_shape=None,
                                 scale=1.25,
-                                dot_size=.5)
+                                dot_size=.25)
     if label_streets:
         for name, street_group in merged_streets.items():
             # don't label highly fragmented streets
