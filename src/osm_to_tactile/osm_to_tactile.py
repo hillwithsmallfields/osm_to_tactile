@@ -321,7 +321,6 @@ def jigsaw_edge(jigsaw_spec, edge):
 
 def cut_edges(width, height, jigsaw):
     """Return the SVG text for cutting out the shape of the tile."""
-    print("making cut edges for", width, height)
     # TODO: use https://www.w3.org/TR/SVG2/paths.html#PathDataCubicBezierCommands
     return ('\n  <path d="M 0 0'
             + (("\n    L %f 0" % width)
@@ -340,7 +339,6 @@ def cut_edges(width, height, jigsaw):
 
 def vertical_cut_section(number, section_length, x_position, jigsaw=False):
     """Return the vertical cut section for one square."""
-    print("vertical_cut_section", number, section_length, x_position)
     return (nubs.vertical_with_two_nubs(
         x0=x_position, y0=number*section_length,
         height=section_length,
@@ -354,7 +352,6 @@ def vertical_cut(x_position, height, down, jigsaw, colour):
     """Return the SVG for a vertical cut.
 
     `down` is how many horizontal rows the map is being cut into."""
-    print("making a vertical cut in", colour, "with", down, "sections")
     section = height/down
     return ('\n  <path d="M %f 0\n' % x_position
             + " ".join(vertical_cut_section(i, section, x_position, jigsaw=jigsaw)
@@ -363,7 +360,6 @@ def vertical_cut(x_position, height, down, jigsaw, colour):
 
 def horizontal_cut_section(number, section_length, y_position, jigsaw=False):
     """Return the horizontal cut section for one square."""
-    print("horizontal_cut_section", number, section_length, y_position)
     return (nubs.horizontal_with_two_nubs(
         x0=number*section_length, y0=y_position,
         width=section_length,
@@ -378,7 +374,6 @@ def horizontal_cut(y_position, width, across, jigsaw, colour):
     """Return the SVG for a horizontal cut.
 
     `across` is how many vertical columns the map is being cut into."""
-    print("making a horizontal cut in", colour, "with", across, "sections")
     section = width/across
     return ('\n  <path d="M 0 %f\n' % y_position
             + " ".join(horizontal_cut_section(i, section, y_position, jigsaw=jigsaw)
@@ -526,11 +521,12 @@ def osm_fetch_streets_in_bbox(input_bbox,
                 case 'crossing':
                     crossings.append(Crossing(coords(transformer, output_bbox, geometry), squash=squash))
         else:
-            street = Street(attributes=tags,
-                            geometry=coords(transformer, output_bbox, geometry),
-                            language=language,
-                            squash=squash)
-            streets[street.name].append(street)
+            if not tags.get('tunnel'):
+                street = Street(attributes=tags,
+                                geometry=coords(transformer, output_bbox, geometry),
+                                language=language,
+                                squash=squash)
+                streets[street.name].append(street)
     return output_bbox, streets, pavements, crossings
 
 def convert_to_islands(streets, pavements=None, crossings=None):
@@ -673,8 +669,8 @@ def osm_to_tactile_main(
             elif centre:
                 latitude, longitude = centre
 
-            # we have latitude and longitude, but we want to calculate
-            # the bounding box in web mercator, which is in metres
+            # We have latitude and longitude, but we want to calculate
+            # the bounding box in web mercator, which is in metres:
             centre_x, centre_y = transformer.transform(longitude, latitude)
 
             # The 1000 is because our coordinates are in metres, but
@@ -690,11 +686,15 @@ def osm_to_tactile_main(
             right = centre_x + map_width_on_ground/2
             top = centre_y + map_height_on_ground/2
 
-            # in web mercator metres:
+            # Get the westmost and southmost grid lines, in web
+            # mercator metres.  We need these both for drawing a grid,
+            # and for snapping to coordinates to a grid.  We'll
+            # calculate them anyway.
             left_most_100m_grid_line = ((left//100)+1)*100
             bottom_most_100m_grid_line = ((bottom//100)+1)*100
 
-            # get them in metres relative to the corner of the map
+            # Get the westmost and southmost 100m grid lines in metres
+            # relative to the corner of the map:
             left_grid = (left_most_100m_grid_line - left) * 1000 / scale
             bottom_grid = (bottom_most_100m_grid_line - bottom) * 1000 / scale
 
@@ -706,7 +706,7 @@ def osm_to_tactile_main(
                 left_grid = 0
                 bottom_grid = 0
 
-            # we want these back into longitude and latitude for the OSM API to fetch
+            # We want these back into longitude and latitude for the OSM API to fetch:
             west, south = transformer.transform(left, bottom, direction=pyproj.enums.TransformDirection.INVERSE)
             east, north = transformer.transform(right, top, direction=pyproj.enums.TransformDirection.INVERSE)
 
@@ -732,6 +732,7 @@ def osm_to_tactile_main(
         show(streets, pavements, crossings)
 
     if output:
+        print("scale is", scale, "so scale factor is", 1000/scale)
         drawable = shapely.affinity.translate(
             shapely.affinity.rotate(
                 shapely.affinity.scale(
