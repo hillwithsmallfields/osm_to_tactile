@@ -619,7 +619,12 @@ def transform_label_geometry(geometry, x, y, label_width, label_height, rotation
             rotation),
         xoff=x, yoff=y)
 
-def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_streets=False):
+def prepare_map(streets,
+                pavements=None,
+                crossings=None,
+                bridges=None,
+                label_streets=False,
+                y_scale_adjust=1.0):
     """Prepare the map for output."""
     merged_streets = {}
     for name, street_group in streets.items():
@@ -628,7 +633,8 @@ def prepare_map(streets, pavements=None, crossings=None, bridges=None, label_str
     labels = []
     dotter = BrailleDotterUKAAF(dot_shape=None,
                                 scale=1.25,
-                                dot_size=.25)
+                                dot_size=.25,
+                                y_scale_adjust=y_scale_adjust)
     if label_streets:
         for name, street_group in merged_streets.items():
             # don't label highly fragmented streets
@@ -790,7 +796,8 @@ def osm_to_tactile_main(
                                                pavements=pavements,
                                                crossings=crossings,
                                                bridges=bridges,
-                                               label_streets=label_streets)
+                                               label_streets=label_streets,
+                                               y_scale_adjust=1.0/y_correction)
         drawable_map = scale_rotate_translate(map_shapes, scale, y_correction, height)
         drawable_labels = scale_rotate_translate(label_shapes, scale, y_correction, height)
         match os.path.splitext(output)[1]:
