@@ -435,7 +435,11 @@ def write_svg(output, bbox, pieces,
     height = top - bottom
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        shapes = drawable_map.svg(fill_color=fill) + drawable_labels.svg(fill_color='blue')
+        shapes = drawable_map.svg(
+            # fill_color=fill
+        ) + drawable_labels.svg(
+            # fill_color='blue'
+        )
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
@@ -698,8 +702,11 @@ def prepare_map(streets,
     for name, street_group in merged_streets.items():
         if name != "<anon>" and len(street_group) <= 3:
             for street in street_group:
-                for node in street.coords():
-                    by_nodes[node].add(name)
+                if street:
+                    coords = street.coords()
+                    if coords:  # sometimes None
+                        for node in coords:
+                            by_nodes[node].add(name)
     junctions = {node: streets
                  for node, streets in by_nodes.items()
                  if len(streets) > 1}
@@ -707,7 +714,7 @@ def prepare_map(streets,
         name: [
             adjoining_streets(street, junctions)
             for street in street_group
-            if street.name != "<anon>"
+            if street.name != "<anon>" and street.coords()
         ]
         for name, street_group in merged_streets.items()
     }
