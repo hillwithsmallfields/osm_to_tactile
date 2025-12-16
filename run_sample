@@ -19,6 +19,7 @@ time $SCRIPT_DIR/src/osm_to_tactile/osm_to_tactile.py \
     --grid \
     --scale $SCALE \
     --label-streets \
-    --squash 1
+    --topology etterbeek-$SCALE.yaml \
+    --squash 2
 
 inkscape $SVGFILE
