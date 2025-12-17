@@ -4,21 +4,26 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 source $SCRIPT_DIR/env/bin/activate
 
+LOCATION=https://www.openstreetmap.org/#map=16/50.83953/4.38571
+LOCATION=https://www.openstreetmap.org/#map=16/50.83665/4.39286
+
 SCALE=750
-SCALE=1250
 SCALE=5000
 SCALE=2500
+SCALE=1250
 
 SVGFILE=etterbeek-$SCALE.svg
 
 time $SCRIPT_DIR/src/osm_to_tactile/osm_to_tactile.py \
-    --osmurl https://www.openstreetmap.org/#map=16/50.83677/4.38893 \
+    --osmurl $LOCATION \
     --width 600 --height 400 \
+    --y-correction 0.65 \
     --output $SVGFILE \
-    --language nl \
-    --grid \
-    --scale $SCALE \
     --label-streets \
-    --squash 1
+    --language fr \
+    --grid \
+    --pieces 3 2 \
+    --scale $SCALE \
+    --squash 2
 
 inkscape $SVGFILE
