@@ -3,8 +3,10 @@
 """Program to output laser-cutter data from OSM."""
 
 import argparse
+import json
 import math
 import os
+import yaml
 
 from collections import defaultdict
 
@@ -139,6 +141,9 @@ def get_args():
         "--output", "-o",
         help="""The name of the output file.
         The output format is deduced from the extension; currently only .svg is supported.""")
+    parser.add_argument(
+        "--topology", "-t",
+        help="""The name of a file to write the topology information to.""")
     parser.add_argument(
         "--verbose", "-v",
         action='store_true')
@@ -430,7 +435,11 @@ def write_svg(output, bbox, pieces,
     height = top - bottom
     with open(output, 'w') as outstream:
         outstream.write('<svg width="%f" height="%f">\n' % (width, height))
-        shapes = drawable_map.svg(fill_color=fill) + drawable_labels.svg(fill_color='blue')
+        shapes = drawable_map.svg(
+            # fill_color=fill
+        ) + drawable_labels.svg(
+            # fill_color='blue'
+        )
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
         outstream.write(shapes)
@@ -619,6 +628,19 @@ def transform_label_geometry(geometry, x, y, label_width, label_height, rotation
             rotation),
         xoff=x, yoff=y)
 
+def adjoining_streets(street, junctions):
+    """Return the names of the streets adjoining the given street.
+    The result is a list of lists, where the outer list is the list of
+    junctions, and the inner lists are the streets joining it at that
+    junction."""
+    return [
+        [sidestreet
+         for sidestreet in junctions[location]
+         if sidestreet != street.name]
+        for location in street.coords()
+        if location in junctions
+    ]
+
 def prepare_map(streets,
                 pavements=None,
                 crossings=None,
@@ -631,11 +653,11 @@ def prepare_map(streets,
         merged_streets[name] = combine_street_segments(street_group)
     map_shapes = convert_to_islands(merged_streets, pavements, crossings, bridges)
     labels = []
-    dotter = BrailleDotterUKAAF(dot_shape=None,
-                                scale=1.25,
-                                dot_size=.25,
-                                y_scale_adjust=y_scale_adjust)
     if label_streets:
+        dotter = BrailleDotterUKAAF(dot_shape=None,
+                                    scale=1.25,
+                                    dot_size=.25,
+                                    y_scale_adjust=y_scale_adjust)
         for name, street_group in merged_streets.items():
             # don't label highly fragmented streets
             if name != "<anon>" and len(street_group) <= 3:
@@ -675,7 +697,29 @@ def prepare_map(streets,
                             print("Took label position choice", taken+1, "for", name)
                     else:
                         print("No possible label placements for", name)
-    return map_shapes, shapely.union_all(labels)
+    # prepare topology data:
+    by_nodes = defaultdict(set)
+    for name, street_group in merged_streets.items():
+        if name != "<anon>" and len(street_group) <= 3:
+            for street in street_group:
+                if street:
+                    coords = street.coords()
+                    if coords:  # sometimes None
+                        for node in coords:
+                            by_nodes[node].add(name)
+    junctions = {node: streets
+                 for node, streets in by_nodes.items()
+                 if len(streets) > 1}
+    junctions_by_street = {
+        name: [
+            adjoining_streets(street, junctions)
+            for street in street_group
+            if street.name != "<anon>" and street.coords()
+        ]
+        for name, street_group in merged_streets.items()
+    }
+    return map_shapes, shapely.union_all(labels), {street: list(adjoiners)
+                                                   for street, adjoiners in junctions_by_street.items()}
 
 def scale_rotate_translate(features, scale, y_correction, height):
     return shapely.affinity.translate(
@@ -708,6 +752,7 @@ def osm_to_tactile_main(
         snap_to_grid=False,
         label_streets=False,
         output=None,
+        topology=None,
         verbose=False):
 
     """Fetch the streets in a rectangular area, and output laser cutter data for them.
@@ -792,12 +837,13 @@ def osm_to_tactile_main(
 
     if output:
         print("scale is", scale, "so scale factor is", 1000/scale)
-        map_shapes, label_shapes = prepare_map(streets,
-                                               pavements=pavements,
-                                               crossings=crossings,
-                                               bridges=bridges,
-                                               label_streets=label_streets,
-                                               y_scale_adjust=1.0/y_correction)
+        map_shapes, label_shapes, topology_data = prepare_map(
+            streets,
+            pavements=pavements,
+            crossings=crossings,
+            bridges=bridges,
+            label_streets=label_streets,
+            y_scale_adjust=1.0/y_correction)
         drawable_map = scale_rotate_translate(map_shapes, scale, y_correction, height)
         drawable_labels = scale_rotate_translate(label_shapes, scale, y_correction, height)
         match os.path.splitext(output)[1]:
@@ -812,6 +858,15 @@ def osm_to_tactile_main(
                           drawable_labels,
                           grid=(left_grid, bottom_grid) if grid else None,
                           jigsaw=jigsaw)
+    if topology:
+        with open(topology, 'w', encoding='utf-8') as outstream:
+            match os.path.splitext(topology)[1]:
+                case '.json':
+                    json.dump(topology_data, outstream, indent=4, ensure_ascii=False)
+                case '.yaml':
+                    yaml.dump(topology_data, outstream, allow_unicode=True)
+                case _:
+                    print("Cannot dump topology to a file of type", os.path.splitext(topology)[1][1:])
 
 if __name__ == "__main__":
     osm_to_tactile_main(**get_args())
