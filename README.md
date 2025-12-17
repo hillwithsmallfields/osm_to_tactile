@@ -71,7 +71,8 @@ you can select which language to use for the names by giving
 The option `--topology` with a filename ending in `.json` or `.yaml`
 will produce a data file describing the streets mapped.  This is
 reasonably readable to technically-minded people, but is intended for
-processing by a separate program into a more human-readable form.
+processing by a separate program (describe-topology.py) into a more
+human-readable form.
 
 ## The topology output format
 
@@ -100,4 +101,5 @@ roundabout.  These may be unified by the software to make a continuous
 road.  The road that crosses that road, however, will not have a
 continuous run of road sections with its name on, and the software
 can't tell that these are one road.  (This is fixable, but probably
-quite complex.)
+quite complex.)  Another is that the algorithm for unifying roads of
+the same names may not be completely sufficient yet.
