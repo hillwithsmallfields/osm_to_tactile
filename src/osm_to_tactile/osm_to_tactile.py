@@ -20,6 +20,7 @@ import nubs
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
+OLD_SHAPELY = True              # the version without my modifications
 LANE_WIDTH = 3
 
 # Some prefixes and suffixes that we remove from street names to make
@@ -297,7 +298,7 @@ class Pavement(LinearWay):
                  type=None,
                  **kwargs):
         super().__init__(geometry=geometry,
-                         width=1,
+                         width=1.5,
                          **kwargs)
 
     def __str__(self):
@@ -442,6 +443,8 @@ def write_svg(output, bbox, pieces,
         )
         if PRETTY_PRINT_SVG:
             shapes = shapes.replace(" L ", "\n    L ").replace(" M ", "\n\n    M ").replace("><", ">\n  <")
+        if OLD_SHAPELY:
+            shapes = shapes.replace(' stroke="#555555" stroke-width="2.0" opacity="0.6"', '')
         outstream.write(shapes)
         outstream.write(cut_edges(width, height, jigsaw or ""))
         if pieces:
