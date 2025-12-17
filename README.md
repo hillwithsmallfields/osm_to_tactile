@@ -72,3 +72,32 @@ The option `--topology` with a filename ending in `.json` or `.yaml`
 will produce a data file describing the streets mapped.  This is
 reasonably readable to technically-minded people, but is intended for
 processing by a separate program into a more human-readable form.
+
+## The topology output format
+
+The topology data describes which streets connect to which other
+streets; strictly speaking, this is which streets have a point in
+common.  The data is the same whether output as JSON or as YAML.
+
+The top-level structure is a dictionary with street names as the keys.
+The values are lists of street sections; many streets will have only
+one section (the software tries to unify the sections, but this is not
+always possible).
+
+Each street section is a list of junctions, and each junction is a
+list of roads meeting the current road at that junction.
+
+The data may not make perfect sense against what you expect it to be.
+One common apparent oddity is that a road may appear to have several
+successive junctions with the same other road.  This occurs when the
+other road has multiple lanes; each lane that your current road
+crosses has a separate junction with it.
+
+One possible reason for a road being split into multiple sections is
+how roundabouts are mapped.  The sections of road making up the
+roundabout may be named as part of one of the roads that meet at the
+roundabout.  These may be unified by the software to make a continuous
+road.  The road that crosses that road, however, will not have a
+continuous run of road sections with its name on, and the software
+can't tell that these are one road.  (This is fixable, but probably
+quite complex.)
