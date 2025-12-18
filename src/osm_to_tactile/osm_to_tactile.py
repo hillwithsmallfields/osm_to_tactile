@@ -198,7 +198,6 @@ class LinearWay:
 
     def coords(self):
         """Return the coordinate list for this way."""
-        print("getting coords of", type(self.geometry))
         try:
             match type(self.geometry):
                 case shapely.geometry.linestring.LineString:
@@ -622,7 +621,7 @@ def convert_to_islands(streets, pavements=None, crossings=None, bridges=None,
     if shapely.is_empty(islands):
         print("Warning: no `islands' produced!")
         write_debug_svg(streets, nominal_width, nominal_height)
-    write_debug_svg(streets, nominal_width, nominal_height)
+    # write_debug_svg(streets, nominal_width, nominal_height)
     if bridges:
         for bridge in bridges:
             islands = shapely.difference(islands, bridge.geometry)
