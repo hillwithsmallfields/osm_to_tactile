@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import os
+import re
 import yaml
 
 from collections import defaultdict
@@ -20,7 +21,7 @@ import nubs
 
 OSM_DEBUG_FORMAT = "https://www.openstreetmap.org/?mlat=%f&mlon=%f#map=16/%f/%f"
 PRETTY_PRINT_SVG = True
-OLD_SHAPELY = True              # the version without my modifications
+OLD_SHAPELY = False              # the version without my modifications
 LANE_WIDTH = 3
 
 # Some prefixes and suffixes that we remove from street names to make
@@ -197,8 +198,15 @@ class LinearWay:
 
     def coords(self):
         """Return the coordinate list for this way."""
+        print("getting coords of", type(self.geometry))
         try:
-            return list(self.geometry.coords)
+            match type(self.geometry):
+                case shapely.geometry.linestring.LineString:
+                    return list(self.geometry.coords)
+                case shapely.geometry.multilinestring.MultiLineString:
+                    return [pair
+                            for linestring in self.geometry.geoms
+                            for pair in linestring.coords]
         except NotImplementedError as e:
             print("error:", e)
             print("when trying to get coords of", self.geometry)
@@ -457,6 +465,9 @@ def write_svg(output, bbox, pieces,
 #     """Write the map as DXF."""
 #     pass
 
+# For debugging
+UNCLIPPED = True
+
 def coords(transformer, clip_rect, geometry):
     """Transform all the coordinates in a geometry, using a given transformer.
     This works whether the geometry has a single line or multiple lines.
@@ -469,10 +480,12 @@ def coords(transformer, clip_rect, geometry):
                              for lon, lat in xy_list)]
 
     def adjust(shape):
-        return shapely.clip_by_rect(shape,
-                                    0, 0,
-                                    clip_rect[2]-clip_rect[0],
-                                    clip_rect[3]-clip_rect[1])
+        return (shape
+                if UNCLIPPED
+                else shapely.clip_by_rect(shape,
+                                          0, 0,
+                                          clip_rect[2]-clip_rect[0],
+                                          clip_rect[3]-clip_rect[1]))
 
     match geometry['type']:
         case 'LineString':
@@ -570,7 +583,32 @@ def osm_fetch_streets_in_bbox(input_bbox,
                         streets[street.name].append(street)
     return output_bbox, streets, pavements, crossings, bridges
 
-def convert_to_islands(streets, pavements=None, crossings=None, bridges=None):
+def write_debug_svg(streets, nominal_width, nominal_height):
+    print("street data:")
+    with open("/tmp/osm_to_tactile_debug.svg", 'w') as debug:
+        bounds = list(shapely.bounds(s.solid()).tolist()
+                      for sg in streets.values()
+                      for s in sg)
+        print("bounds are", bounds)
+        left = min(b[0] for b in bounds)
+        bottom = min(b[1] for b in bounds)
+        right = max(b[2] for b in bounds)
+        top = max(b[3] for b in bounds)
+        width = right - left
+        height = top - bottom
+        print("bounding box is", left, bottom, right, top)
+        print("dimensions are", width, height)
+        debug.write('<svg width="%f" height="%f">\n' % (width, height))
+        # debug.write('<rect fill="green" width="%f" height="%f" x="0" y="0"/>\n' % (nominal_width, nominal_height))
+        for sg in streets.values():
+            for s in sg:
+                print("  street", s, "as solid is", s.solid())
+                debug.write(s.solid().svg())
+                debug.write("\n")
+        debug.write("</svg>\n")
+
+def convert_to_islands(streets, pavements=None, crossings=None, bridges=None,
+                       verbose=False, nominal_width=100, nominal_height=100):
     """Convert the solid ways to a probably contiguous area, with islands in it,
     where each island is the area between streets (or between a street and its pavements).
     If used for cutting, this will result in a cut sheet which can be stuck to a baseboard."""
@@ -579,6 +617,12 @@ def convert_to_islands(streets, pavements=None, crossings=None, bridges=None):
                                  for s in sg]
                                 + [p.solid() for p in pavements] if pavements else []
                                 + [c.solid() for c in crossings] if pavements else [])
+    if verbose:
+        print("raw islands are:", islands)
+    if shapely.is_empty(islands):
+        print("Warning: no `islands' produced!")
+        write_debug_svg(streets, nominal_width, nominal_height)
+    write_debug_svg(streets, nominal_width, nominal_height)
     if bridges:
         for bridge in bridges:
             islands = shapely.difference(islands, bridge.geometry)
@@ -649,12 +693,22 @@ def prepare_map(streets,
                 crossings=None,
                 bridges=None,
                 label_streets=False,
-                y_scale_adjust=1.0):
+                y_scale_adjust=1.0,
+                verbose=False,
+                nominal_width=100,
+                nominal_height=100):
     """Prepare the map for output."""
     merged_streets = {}
     for name, street_group in streets.items():
         merged_streets[name] = combine_street_segments(street_group)
-    map_shapes = convert_to_islands(merged_streets, pavements, crossings, bridges)
+    if verbose:
+        print("merged streets are:", merged_streets)
+    map_shapes = convert_to_islands(merged_streets, pavements, crossings, bridges,
+                                    verbose=verbose, nominal_width=nominal_width, nominal_height=nominal_height)
+    if not map_shapes:
+        print("Warning: no shapes generated!")
+    if verbose:
+        print("map shapes are:", map_shapes)
     labels = []
     if label_streets:
         dotter = BrailleDotterUKAAF(dot_shape=None,
@@ -771,7 +825,14 @@ def osm_to_tactile_main(
             # TODO: calculate scale
         elif width and height:
             if osmurl:
-                latitude, longitude = [float(arg) for arg in osmurl.split("=")[1].split("/")[1:]]
+                if 'mlat' in osmurl and 'mlon' in osmurl:
+                    if (m := re.search("mlat=([-0-9.]+)&mlon=([-0-9.]+)", osmurl)):
+                        latitude = float(m.group(1))
+                        longitude = float(m.group(2))
+                    else:
+                        raise ValueError("malformed OSM marker URL: " + osmurl)
+                else:
+                    latitude, longitude = [float(arg) for arg in osmurl.split("=")[1].split("/")[1:]]
             elif centre:
                 latitude, longitude = centre
 
@@ -839,21 +900,28 @@ def osm_to_tactile_main(
         show(streets, pavements, crossings)
 
     if output:
-        print("scale is", scale, "so scale factor is", 1000/scale)
+        if verbose:
+            print("scale is", scale, "so scale factor is", 1000/scale)
         map_shapes, label_shapes, topology_data = prepare_map(
             streets,
             pavements=pavements,
             crossings=crossings,
             bridges=bridges,
             label_streets=label_streets,
-            y_scale_adjust=1.0/y_correction)
+            y_scale_adjust=1.0/y_correction,
+            verbose=verbose,
+            nominal_width=width,
+            nominal_height=height)
         drawable_map = scale_rotate_translate(map_shapes, scale, y_correction, height)
         drawable_labels = scale_rotate_translate(label_shapes, scale, y_correction, height)
+        drawable_far_corner = scale_rotate_translate(shapely.Point(width, height), scale, y_correction, height)
+        print("drawable_far_corner", drawable_far_corner)
         match os.path.splitext(output)[1]:
             # case '.dxf':
             #     write_dxf(output, bbox, drawable_map, scale=1000/scale, jigsaw=jigsaw)
             case '.svg':
-                print("writing SVG; width", width, "height", height)
+                if verbose:
+                    print("writing SVG file",  output, "at width", width, "and height", height)
                 write_svg(output,
                           [0, 0, width, height], # bbox,
                           pieces,
@@ -862,6 +930,8 @@ def osm_to_tactile_main(
                           grid=(left_grid, bottom_grid) if grid else None,
                           jigsaw=jigsaw)
     if topology:
+        if verbose:
+            print("writing topology file",  topology)
         with open(topology, 'w', encoding='utf-8') as outstream:
             match os.path.splitext(topology)[1]:
                 case '.json':
