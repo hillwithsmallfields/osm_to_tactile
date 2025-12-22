@@ -679,13 +679,11 @@ def adjoining_streets(street, junctions):
     The result is a list of lists, where the outer list is the list of
     junctions, and the inner lists are the streets joining it at that
     junction."""
-    return [
-        [sidestreet
-         for sidestreet in junctions[location]
-         if sidestreet != street.name]
-        for location in street.coords()
-        if location in junctions
-    ]
+    return {location: [sidestreet
+                       for sidestreet in junctions[location]
+                       if sidestreet != street.name]
+            for location in street.coords()
+            if location in junctions}
 
 def prepare_map(streets,
                 pavements=None,
@@ -753,7 +751,11 @@ def prepare_map(streets,
                             print("Took label position choice", taken+1, "for", name)
                     else:
                         print("No possible label placements for", name)
-    # prepare topology data:
+
+    # Prepare topology data
+
+    # Build a dictionary of nodes, keyed by their geographical
+    # positions.  The values are sets of street names.
     by_nodes = defaultdict(set)
     for name, street_group in merged_streets.items():
         if name != "<anon>" and len(street_group) <= 3:
@@ -763,19 +765,22 @@ def prepare_map(streets,
                     if coords:  # sometimes None
                         for node in coords:
                             by_nodes[node].add(name)
+
+    # Filter the dictionary to just the nodes that have more than one
+    # street name:
     junctions = {node: streets
                  for node, streets in by_nodes.items()
                  if len(streets) > 1}
-    junctions_by_street = {
-        name: [
-            adjoining_streets(street, junctions)
-            for street in street_group
-            if street.name != "<anon>" and street.coords()
-        ]
-        for name, street_group in merged_streets.items()
-    }
-    return map_shapes, shapely.union_all(labels), {street: list(adjoiners)
-                                                   for street, adjoiners in junctions_by_street.items()}
+
+    junctions_by_street = {name: [adjoining_streets(street, junctions)
+                                  for street in street_group
+                                  if street.name != "<anon>" and street.coords()]
+                           for name, street_group in merged_streets.items()}
+
+    return (map_shapes,
+            shapely.union_all(labels),
+            {street: list(adjoiners)
+             for street, adjoiners in junctions_by_street.items()})
 
 def scale_rotate_translate(features, scale, y_correction, height):
     return shapely.affinity.translate(
@@ -931,6 +936,14 @@ def osm_to_tactile_main(
     if topology:
         if verbose:
             print("writing topology file",  topology)
+
+        topology_data = {street: [{str(coords): sidestreets
+                                   for coords, sidestreets in junction.items()}
+                                  for junction in junctions
+                                  if junction]
+                         for street, junctions in topology_data.items()
+                         if junctions}
+
         with open(topology, 'w', encoding='utf-8') as outstream:
             match os.path.splitext(topology)[1]:
                 case '.json':
